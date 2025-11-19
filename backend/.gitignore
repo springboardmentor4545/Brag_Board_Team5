@@ -1,0 +1,56 @@
+# Byte-compiled / optimized / compiled files
+__pycache__/
+*.pyc
+*.pyd
+*.pyo
+*.egg-info/
+.pytest_cache/
+
+# Distribution / packaging
+.Python
+build/
+dist/
+eggs/
+*.egg
+*.whl
+
+# Environments
+# Ignore local environment variable files, but keep the example file tracked
+.env
+.env.*
+!.env.example
+venv/
+env/
+# virtualenv environments
+.venv/
+bin/
+include/
+lib/
+lib64/
+share/
+
+# Editors and IDEs
+.vscode/
+.idea/
+*.swp
+*.bak
+*.swo
+
+# OS generated files
+.DS_Store
+.Trashes
+Thumbs.db
+
+# Logs and databases
+*.log
+*.sqlite3
+db.sqlite3
+
+# Test and coverage
+.coverage
+htmlcov/
+.nox/
+
+# Specific to Django
+media/
+static/

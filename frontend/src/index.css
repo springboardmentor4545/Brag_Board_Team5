@@ -1,0 +1,85 @@
+/* Tailwind base (provided via Vite plugin runtime). Removed @tailwind directives to satisfy CSS analyzer; keep import for build pipeline if needed. */
+@import "tailwindcss";
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* Ensure background switches when html.dark is applied */
+html.dark body {
+  background-color: #0f172a; /* slate-900 */
+  color: #f1f5f9; /* slate-100 */
+}
+
+/* Global, accessible hover/focus animations for buttons and common UI controls (pure CSS to avoid @apply lint errors) */
+button:not(.no-anim) {
+  transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+  will-change: transform;
+}
+button:not(.no-anim):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px -2px rgba(0,0,0,0.15);
+}
+button:not(.no-anim):active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px -1px rgba(0,0,0,0.25);
+}
+button:not(.no-anim):focus-visible {
+  outline: 2px solid #3b82f6; /* blue-500 */
+  outline-offset: 2px;
+}
+
+/* Reusable button primitives */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem; /* rounded-md */
+  font-weight: 500;
+  line-height: 1.25;
+  transition: background-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+.btn-primary {
+  background: #2563eb; /* blue-600 */
+  color: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+.btn-primary:hover { background: #1d4ed8; box-shadow: 0 4px 10px -2px rgba(0,0,0,0.25); }
+.btn-primary:active { background: #1e40af; box-shadow: 0 2px 6px -2px rgba(0,0,0,0.3); }
+.dark .btn-primary { background:#1d4ed8; }
+.dark .btn-primary:hover { background:#1e40af; }
+.btn-outline {
+  background: transparent;
+  color: #374151; /* gray-700 */
+  border: 1px solid #d1d5db; /* gray-300 */
+}
+.btn-outline:hover { background: #f3f4f6; }
+.dark .btn-outline { color:#d1d5db; border-color:#374151; }
+.dark .btn-outline:hover { background: rgba(55,65,81,0.4); }
+.btn-ghost {
+  background: transparent;
+  color: #374151;
+}
+.btn-ghost:hover { color:#2563eb; }
+.dark .btn-ghost { color:#e5e7eb; }
+.dark .btn-ghost:hover { color:#60a5fa; }
+
+/* Links and interactive items fade color smoothly */
+a, .link { transition: color 150ms ease, background-color 150ms ease; }
+
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
