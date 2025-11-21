@@ -1,8 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { userAPI } from '../../services/api';
+import { encodeMentionPayload } from '../../utils/mentions';
 
-// Custom lightweight mention input: detects '@', shows suggestions, inserts markup @[Name](id)
-export default function CommentInput({ value = '', onChange = () => {}, onAddComment = () => {} }) {
+// Custom lightweight mention input: detects '@', shows suggestions, inserts hidden ID markup using zero-width joins
+export default function CommentInput({
+  value = '',
+  onChange = () => {},
+  onAddComment = () => {},
+  errorMessage = '',
+  successMessage = '',
+}) {
   const propValue = typeof value === 'string' ? value : (value?.toString?.() ?? '');
   const [text, setText] = useState(propValue);
   const [query, setQuery] = useState('');
@@ -12,7 +19,7 @@ export default function CommentInput({ value = '', onChange = () => {}, onAddCom
   const textareaRef = useRef(null);
 
   useEffect(() => {
-    if (propValue !== text) setText(propValue);
+    setText(propValue);
   }, [propValue]);
 
   useEffect(() => {
@@ -57,14 +64,14 @@ export default function CommentInput({ value = '', onChange = () => {}, onAddCom
     if (triggerIndex < 0) return;
     const before = text.slice(0, triggerIndex);
     const after = text.slice(caret);
-    const markup = `@[${user.name}](${user.id})`;
-    const next = before + markup + ' ' + after; // append space after mention
+    const encodedMention = `@${user.name}${encodeMentionPayload(user.id)}`;
+    const next = before + encodedMention + ' ' + after; // append space after mention
     setText(next);
     onChange(next);
     setShowSuggestions(false);
     setQuery('');
     // move caret after inserted mention + space
-    const newPos = (before + markup + ' ').length;
+    const newPos = (before + encodedMention + ' ').length;
     requestAnimationFrame(() => {
       el.focus();
       el.selectionStart = el.selectionEnd = newPos;
@@ -90,8 +97,12 @@ export default function CommentInput({ value = '', onChange = () => {}, onAddCom
     }
   };
 
+  const handleSubmit = (e) => {
+    onAddComment(e);
+  };
+
   return (
-    <form onSubmit={onAddComment} className="flex space-x-2 items-start relative">
+    <form onSubmit={handleSubmit} className="flex space-x-2 items-start relative">
       <div className="flex-1">
         <textarea
           ref={textareaRef}
@@ -102,6 +113,12 @@ export default function CommentInput({ value = '', onChange = () => {}, onAddCom
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400"
           rows={1}
         />
+        {errorMessage && (
+          <p className="mt-1 text-xs text-red-600" role="alert">{errorMessage}</p>
+        )}
+        {successMessage && !errorMessage && (
+          <p className="mt-1 text-xs text-green-600">{successMessage}</p>
+        )}
         {showSuggestions && suggestions.length > 0 && (
           <ul className="absolute mt-1 w-full max-w-sm bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow z-50 text-sm">
             {suggestions.map((s, idx) => (
@@ -114,7 +131,12 @@ export default function CommentInput({ value = '', onChange = () => {}, onAddCom
           </ul>
         )}
       </div>
-      <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Post</button>
+      <button
+        type="submit"
+        className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+      >
+        Post
+      </button>
     </form>
   );
 }

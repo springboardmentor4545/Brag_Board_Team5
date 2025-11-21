@@ -1,5 +1,4 @@
-import { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect, useCallback } from 'react';
 import { shoutoutAPI, commentAPI, reactionAPI, userAPI } from '../services/api';
 import CreateShoutout from '../components/shoutouts/CreateShoutout';
 import ShoutoutCard from '../components/shoutouts/ShoutoutCard';
@@ -17,13 +16,10 @@ export default function Feed() {
   const [senderOptions, setSenderOptions] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const { user } = useAuth();
+  const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  useEffect(() => {
-    fetchShoutouts();
-  }, [filterDept, filterSender, startDate, endDate]);
-
-  const fetchShoutouts = async () => {
+  const fetchShoutouts = useCallback(async () => {
+    setLoading(true);
     try {
       const params = { all_departments: true }; // Fetch from all departments
       if (filterDept) params.department = filterDept;
@@ -37,7 +33,17 @@ export default function Feed() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterDept, filterSender, startDate, endDate]);
+
+  useEffect(() => {
+    fetchShoutouts();
+  }, [fetchShoutouts]);
+
+  useEffect(() => {
+    if (!feedback.message) return undefined;
+    const timer = setTimeout(() => setFeedback({ type: '', message: '' }), 4000);
+    return () => clearTimeout(timer);
+  }, [feedback]);
 
   // Simple sender autocomplete when user types 2+ chars
   const handleSenderInput = async (val) => {
@@ -46,7 +52,7 @@ export default function Feed() {
       try {
         const { data } = await userAPI.search(val);
         setSenderOptions(data || []);
-      } catch (e) {
+      } catch {
         setSenderOptions([]);
       }
     } else {
@@ -65,9 +71,12 @@ export default function Feed() {
     try {
       await shoutoutAPI.create(data);
       setShowCreateModal(false);
+      setFeedback({ type: 'success', message: 'Shout-out posted successfully.' });
       fetchShoutouts();
     } catch (error) {
       console.error('Error creating shoutout:', error);
+      const detail = error?.response?.data?.detail || 'Failed to create shout-out.';
+      setFeedback({ type: 'error', message: detail });
       throw error;
     }
   };
@@ -107,6 +116,25 @@ export default function Feed() {
   return (
   <div className="min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition" key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}>
       <div className="max-w-2xl mx-auto py-8 px-4 page-container">
+        {feedback.message && (
+          <div
+            className={`mb-4 px-4 py-3 rounded border flex items-start justify-between gap-3 ${
+              feedback.type === 'success'
+                ? 'bg-green-100 dark:bg-green-900/40 border-green-400 dark:border-green-700 text-green-700 dark:text-green-300'
+                : 'bg-red-100 dark:bg-red-900/40 border-red-400 dark:border-red-600 text-red-700 dark:text-red-300'
+            }`}
+          >
+            <span className="text-sm flex-1">{feedback.message}</span>
+            <button
+              type="button"
+              aria-label="Dismiss message"
+              onClick={() => setFeedback({ type: '', message: '' })}
+              className="text-sm font-semibold"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         <div className="mb-4 flex flex-col gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Departments Feed</h1>

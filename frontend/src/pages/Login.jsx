@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isValidEmail } from '../utils/validation';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
   const isPendingApproval = error === 'Waiting for company verification';
@@ -18,21 +20,33 @@ export default function Login() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    // if (!passwordIsValid(password)) {
-    //   setError('Password must be at least 8 characters and include a letter, number, and special character.');
-    //   return;
-    // }
+    const normalizedEmail = email.trim();
+    const passwordValue = password.trim();
+
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Enter a valid email address.');
+      return;
+    }
+    if (!passwordValue) {
+      setError('Password is required.');
+      return;
+    }
     setLoading(true);
 
     try {
-      const loggedInUser = await login(email, password);
+      const loggedInUser = await login(normalizedEmail.toLowerCase(), passwordValue);
       if (loggedInUser?.role === 'admin') {
         navigate('/admin');
       } else {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Invalid credentials');
+      const detail = err?.response?.data?.detail
+        || err?.response?.data?.message
+        || err?.originalError?.response?.data?.detail
+        || err?.originalError?.response?.data?.message;
+      const message = detail || err?.message || 'Invalid credentials';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -85,15 +99,23 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
-              <div>
+              <div className="relative">
                 <input
-                  type="password"
+                  type={showPassword ? 'text' : 'password'}
                   required
                   className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 text-gray-900 dark:text-gray-100 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800"
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-xs font-medium text-blue-600 dark:text-blue-300"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
               </div>
             </div>
 

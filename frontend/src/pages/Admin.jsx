@@ -2,11 +2,13 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI, shoutoutAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 import DepartmentStatsChart from '../../src/components/admin/DepartmentStatsChart';
 
 export default function Admin() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const { addToast } = useToast();
   const [analytics, setAnalytics] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [shoutoutReports, setShoutoutReports] = useState([]);
@@ -122,10 +124,13 @@ export default function Admin() {
   const handleResolveShoutoutReport = async (reportId, action) => {
     setResolvingShoutoutReportId(reportId);
     try {
-      await adminAPI.resolveReport(reportId, action);
+      await adminAPI.resolveReport(reportId, action, { skipErrorToast: true });
       await fetchShoutoutReports();
+      const actionText = action === 'approved' ? 'approved' : 'rejected';
+      addToast('success', `Report ${actionText} successfully.`);
     } catch (e) {
       console.error('Failed to resolve report', e);
+      addToast('error', 'Failed to update report. Please try again.');
     } finally {
       setResolvingShoutoutReportId(null);
     }
@@ -133,22 +138,27 @@ export default function Admin() {
 
   const handleDeleteShoutout = async (id) => {
     try {
-      await adminAPI.deleteShoutout(id);
+      await adminAPI.deleteShoutout(id, { skipErrorToast: true });
       // refresh both analytics and reports as counts change
       fetchData();
       fetchShoutoutReports();
+      addToast('success', 'Shout-out deleted successfully.');
     } catch (e) {
       console.error('Failed to delete shoutout', e);
+      addToast('error', 'Failed to delete shout-out. Please try again.');
     }
   };
 
   const handleResolveCommentReport = async (reportId, action) => {
     setResolvingCommentReportId(reportId);
     try {
-      await adminAPI.resolveCommentReport(reportId, action);
+      await adminAPI.resolveCommentReport(reportId, action, { skipErrorToast: true });
       await fetchCommentReports();
+      const actionText = action === 'approved' ? 'approved' : 'rejected';
+      addToast('success', `Comment report ${actionText}.`);
     } catch (e) {
       console.error('Failed to resolve comment report', e);
+      addToast('error', 'Failed to update comment report. Please try again.');
     } finally {
       setResolvingCommentReportId(null);
     }
@@ -156,25 +166,31 @@ export default function Admin() {
 
   const handleDeleteComment = async (commentId) => {
     try {
-      await adminAPI.deleteComment(commentId);
+      await adminAPI.deleteComment(commentId, { skipErrorToast: true });
       await fetchCommentReports();
       fetchShoutoutReports();
+      addToast('success', 'Comment removed successfully.');
     } catch (e) {
       console.error('Failed to delete comment', e);
+      addToast('error', 'Failed to delete comment. Please try again.');
     }
   };
 
   const handleDepartmentDecision = async (requestId, action) => {
     setProcessingRequestId(requestId);
+    const pastTense = action === 'approved' ? 'approved' : 'rejected';
+    const verb = action === 'approved' ? 'approve' : 'reject';
     try {
-      await adminAPI.decideDepartmentChangeRequest(requestId, action);
+      await adminAPI.decideDepartmentChangeRequest(requestId, action, { skipErrorToast: true });
       await fetchDepartmentRequests();
       if (action === 'approved') {
         // pending requests list changed, refresh analytics to reflect updated department stats
         fetchData();
       }
+      addToast('success', `Request ${pastTense} successfully.`);
     } catch (error) {
       console.error(`Failed to ${action} request`, error);
+      addToast('error', `Failed to ${verb} request. Please try again.`);
     } finally {
       setProcessingRequestId(null);
     }
@@ -183,10 +199,12 @@ export default function Admin() {
   const openShoutout = async (id) => {
     setShoutoutPreview({ open: true, data: null, loading: true, error: '' });
     try {
-      const res = await shoutoutAPI.getOne(id);
+      const res = await shoutoutAPI.getOne(id, { skipErrorToast: true });
       setShoutoutPreview({ open: true, data: res.data, loading: false, error: '' });
     } catch (e) {
-      setShoutoutPreview({ open: true, data: null, loading: false, error: e?.response?.data?.detail || 'Failed to load shout-out' });
+      const message = e?.response?.data?.detail || 'Failed to load shout-out.';
+      setShoutoutPreview({ open: true, data: null, loading: false, error: message });
+      addToast('error', message);
     }
   };
 

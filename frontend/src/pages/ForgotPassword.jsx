@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import { emitToast } from '../utils/toast.js';
+import { isValidEmail } from '../utils/validation';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -12,13 +14,22 @@ export default function ForgotPassword() {
     e.preventDefault();
     setMessage('');
     setError('');
+    const normalizedEmail = email.trim();
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Enter a valid email address.');
+      return;
+    }
     setLoading(true);
     try {
-      await authAPI.forgotPassword({ email });
-      setMessage('If that email exists, a reset link has been sent. Please check your inbox.');
-    } catch (err) {
+      await authAPI.forgotPassword({ email: normalizedEmail.toLowerCase() }, { skipErrorToast: true });
+      const successMessage = 'If that email exists, a reset link has been sent. Please check your inbox.';
+      setMessage(successMessage);
+      emitToast('success', successMessage);
+    } catch {
       // Still show generic message to avoid enumeration feedback
-      setMessage('If that email exists, a reset link has been sent. Please check your inbox.');
+      const infoMessage = 'If that email exists, a reset link has been sent. Please check your inbox.';
+      setMessage(infoMessage);
+      emitToast('info', infoMessage);
     } finally {
       setLoading(false);
     }

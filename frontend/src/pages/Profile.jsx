@@ -37,6 +37,19 @@ export default function Profile() {
   const handleAvatarChange = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
+    setSuccess('');
+    const allowedTypes = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+    if (!allowedTypes.has(file.type)) {
+      setError('Profile photo must be a PNG, JPG, WEBP, or GIF image.');
+      event.target.value = '';
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('Profile photo size must be 2MB or smaller.');
+      event.target.value = '';
+      return;
+    }
+    setError('');
     setAvatarFile(file);
     if (avatarObjectUrlRef.current) {
       URL.revokeObjectURL(avatarObjectUrlRef.current);
@@ -57,14 +70,29 @@ export default function Profile() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setSuccess('');
     setError('');
 
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError('Full name is required.');
+      return;
+    }
+
+    const trimmedDepartment = (department || '').trim();
+    if (user?.role !== 'admin' && !trimmedDepartment) {
+      setError('Department is required.');
+      return;
+    }
+
+    setLoading(true);
+
     try {
       const originalDepartment = user?.department || '';
-      const departmentChanged = user?.role !== 'admin' && department && department !== originalDepartment;
-      const payload = user?.role === 'admin' ? { name } : { name, department };
+      const departmentChanged = user?.role !== 'admin' && trimmedDepartment && trimmedDepartment !== originalDepartment;
+      const payload = user?.role === 'admin'
+        ? { name: trimmedName }
+        : { name: trimmedName, department: trimmedDepartment };
       const response = await userAPI.updateMe(payload);
       let updatedUser = response.data;
 

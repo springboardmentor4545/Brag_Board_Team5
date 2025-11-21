@@ -1,6 +1,13 @@
 import axios from 'axios';
+import { emitToast } from '../utils/toast.js';
 
-const API_URL = '/api';
+const rawBaseUrl = typeof import.meta.env?.VITE_API_BASE_URL === 'string'
+  ? import.meta.env.VITE_API_BASE_URL.trim()
+  : '';
+
+const API_URL = rawBaseUrl
+  ? rawBaseUrl.replace(/\/$/, '')
+  : '/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -17,7 +24,11 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const originalRequest = error.config;
+    if (axios.isCancel?.(error)) {
+      return Promise.reject(error);
+    }
+
+    const originalRequest = error.config || {};
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       const refreshToken = localStorage.getItem('refresh_token');
@@ -29,15 +40,39 @@ api.interceptors.response.use(
           const { access_token, refresh_token: newRefreshToken } = response.data;
           localStorage.setItem('access_token', access_token);
           localStorage.setItem('refresh_token', newRefreshToken);
+          originalRequest.headers = originalRequest.headers || {};
           originalRequest.headers.Authorization = `Bearer ${access_token}`;
           return api(originalRequest);
         } catch {
           localStorage.removeItem('access_token');
           localStorage.removeItem('refresh_token');
+          emitToast('info', 'Your session expired. Please sign in again.');
           window.location.href = '/login';
         }
       }
     }
+
+    const { response } = error;
+    const suppressToast = originalRequest?.skipErrorToast;
+
+    if (!response) {
+      if (!suppressToast) {
+        emitToast('error', 'Network error. Please check your connection and try again.');
+      }
+      return Promise.reject(error);
+    }
+
+    if (!suppressToast && response.status !== 401) {
+      const message = response.data?.detail
+        || response.data?.message
+        || response.data?.error
+        || (response.status >= 500
+          ? 'Something went wrong on our side. Please try again shortly.'
+          : `Request failed with status ${response.status}`);
+
+      emitToast('error', message);
+    }
+
     return Promise.reject(error);
   }
 );
@@ -45,10 +80,10 @@ api.interceptors.response.use(
 export default api;
 
 export const authAPI = {
-  register: (data) => api.post('/auth/register', data),
-  login: (data) => api.post('/auth/login', data),
-  forgotPassword: (data) => api.post('/auth/forgot-password', data),
-  resetPassword: (data) => api.post('/auth/reset-password', data),
+  register: (data, config = {}) => api.post('/auth/register', data, config),
+  login: (data, config = {}) => api.post('/auth/login', data, config),
+  forgotPassword: (data, config = {}) => api.post('/auth/forgot-password', data, config),
+  resetPassword: (data, config = {}) => api.post('/auth/reset-password', data, config),
 };
 
 export const userAPI = {
@@ -75,7 +110,7 @@ export const shoutoutAPI = {
     return api.post('/shoutouts', data);
   },
   getAll: (params) => api.get('/shoutouts', { params }),
-  getOne: (id) => api.get(`/shoutouts/${id}`),
+  getOne: (id, config = {}) => api.get(`/shoutouts/${id}`, config),
   update: (id, data) => api.put(`/shoutouts/${id}`, data),
   delete: (id) => api.delete(`/shoutouts/${id}`),
 };
@@ -98,15 +133,15 @@ export const reactionAPI = {
 export const adminAPI = {
   getAnalytics: () => api.get('/admin/analytics'),
   getReports: (status) => api.get('/admin/reports', { params: status ? { status } : undefined }),
-  resolveReport: (reportId, action) => api.post(`/admin/reports/${reportId}/resolve`, { action }),
-  deleteShoutout: (id) => api.delete(`/admin/shoutouts/${id}`),
+  resolveReport: (reportId, action, config = {}) => api.post(`/admin/reports/${reportId}/resolve`, { action }, config),
+  deleteShoutout: (id, config = {}) => api.delete(`/admin/shoutouts/${id}`, config),
   getLeaderboard: () => api.get('/admin/leaderboard'),
   reportShoutout: (shoutoutId, reason) => api.post(`/admin/shoutouts/${shoutoutId}/report`, { reason }),
-  deleteComment: (commentId) => api.delete(`/shoutouts/comments/${commentId}`),
+  deleteComment: (commentId, config = {}) => api.delete(`/shoutouts/comments/${commentId}`, config),
   getDepartmentChangeRequests: (status) => api.get('/admin/department-change-requests', { params: { status } }),
-  decideDepartmentChangeRequest: (requestId, action) => api.post(`/admin/department-change-requests/${requestId}/decision`, { action }),
+  decideDepartmentChangeRequest: (requestId, action, config = {}) => api.post(`/admin/department-change-requests/${requestId}/decision`, { action }, config),
   getCommentReports: (status) => api.get('/admin/comment-reports', { params: status ? { status } : undefined }),
-  resolveCommentReport: (reportId, action) => api.post(`/admin/comment-reports/${reportId}/resolve`, { action }),
+  resolveCommentReport: (reportId, action, config = {}) => api.post(`/admin/comment-reports/${reportId}/resolve`, { action }, config),
 };
 
 export const notificationsAPI = {

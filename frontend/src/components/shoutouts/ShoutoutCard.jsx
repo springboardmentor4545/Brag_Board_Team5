@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { commentAPI, reactionAPI, adminAPI } from '../../services/api';
 import CommentInput from './CommentInput';
 import Avatar from '../common/Avatar';
+import { extractMentionIds, parseMentions } from '../../utils/mentions';
 
 const REACTION_TYPES = [
   { type: 'like', label: 'Like', icon: '👍' },
@@ -24,15 +25,21 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
+  const [commentError, setCommentError] = useState('');
+  const [commentSuccess, setCommentSuccess] = useState('');
   const [reactionMenuOpen, setReactionMenuOpen] = useState(false);
   const [reactionDetails, setReactionDetails] = useState({ open: false, loading: false, counts: {}, usersByType: {} });
   const [reportModal, setReportModal] = useState(() => createInitialReportModalState());
   // no local loading state required for now
   const reactionMenuTimeoutRef = useRef(null);
+  const commentFeedbackTimeoutRef = useRef(null);
 
   useEffect(() => () => {
     if (reactionMenuTimeoutRef.current) {
       clearTimeout(reactionMenuTimeoutRef.current);
+    }
+    if (commentFeedbackTimeoutRef.current) {
+      clearTimeout(commentFeedbackTimeoutRef.current);
     }
   }, []);
 
@@ -70,14 +77,18 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
 
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!commentText.trim()) return;
-
-    const mentionRegex = /@\[(.*?)\]\((.*?)\)/g;
-    let match;
-    const mentions = [];
-    while ((match = mentionRegex.exec(commentText)) !== null) {
-      mentions.push(match[2]);
+    setCommentError('');
+    setCommentSuccess('');
+    if (commentFeedbackTimeoutRef.current) {
+      clearTimeout(commentFeedbackTimeoutRef.current);
     }
+
+    if (!commentText.trim()) {
+      setCommentError('Comment cannot be empty.');
+      return;
+    }
+
+    const mentions = extractMentionIds(commentText);
 
     try {
       await onComment(shoutout.id, { content: commentText, mentions });
@@ -85,8 +96,12 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
       // We need to reload the comments after adding a new one.
       // We can do this by calling onRefresh, which will refetch the shoutouts.
       onRefresh();
+      setCommentSuccess('Comment posted successfully.');
+      commentFeedbackTimeoutRef.current = setTimeout(() => setCommentSuccess(''), 3000);
     } catch (error) {
       console.error('Error adding comment:', error);
+      const detail = error?.response?.data?.detail || 'Unable to add comment.';
+      setCommentError(detail);
     }
   };
 
@@ -350,8 +365,21 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
           </div>
           <CommentInput
             value={commentText}
-            onChange={(v) => setCommentText(v || '')}
+            onChange={(v) => {
+              setCommentText(v || '');
+              if (commentError) {
+                setCommentError('');
+              }
+              if (commentSuccess) {
+                setCommentSuccess('');
+              }
+              if (commentFeedbackTimeoutRef.current) {
+                clearTimeout(commentFeedbackTimeoutRef.current);
+              }
+            }}
             onAddComment={handleAddComment}
+            errorMessage={commentError}
+            successMessage={commentSuccess}
           />
         </div>
       )}
@@ -397,27 +425,28 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   );
 }
 
-// Helper to render @mentions nicely from markup @[display](id)
+// Helper to render @mentions nicely from encoded markup using zero-width separators inserted client-side
 function renderMentions(text) {
   if (!text) return null;
-  const nodes = [];
-  const regex = /@\[(.+?)\]\((\d+)\)/g;
-  let lastIndex = 0;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
+  const parts = [];
+  const mentions = parseMentions(text);
+  let cursor = 0;
+
+  mentions.forEach((mention, idx) => {
+    if (mention.index > cursor) {
+      parts.push(text.slice(cursor, mention.index));
     }
-    const display = match[1];
-    nodes.push(
-      <span key={`m-${match.index}`} className="text-blue-600 font-medium">@{display}</span>
+    parts.push(
+      <span key={`m-${mention.index}-${idx}`} className="text-blue-600 font-medium">@{mention.display}</span>
     );
-    lastIndex = regex.lastIndex;
+    cursor = mention.index + mention.length;
+  });
+
+  if (cursor < text.length) {
+    parts.push(text.slice(cursor));
   }
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-  return nodes;
+
+  return parts;
 }
 
 function AttachmentPreview({ attachment }) {

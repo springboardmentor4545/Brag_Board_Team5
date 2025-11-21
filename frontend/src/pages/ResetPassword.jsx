@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { authAPI } from '../services/api';
+import { emitToast } from '../utils/toast.js';
+import { isStrongPassword, PASSWORD_REQUIREMENTS } from '../utils/validation';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
@@ -12,6 +14,8 @@ export default function ResetPassword() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -24,22 +28,29 @@ export default function ResetPassword() {
     setMessage('');
     setError('');
 
-    if (password.length < 8) {
-      setError('Password should be at least 8 characters.');
+    const passwordValue = password.trim();
+    const confirmValue = confirmPassword.trim();
+
+    if (!isStrongPassword(passwordValue)) {
+      setError(PASSWORD_REQUIREMENTS);
       return;
     }
-    if (password !== confirmPassword) {
+    if (passwordValue !== confirmValue) {
       setError('Passwords do not match.');
       return;
     }
 
     setLoading(true);
     try {
-      const res = await authAPI.resetPassword({ token, new_password: password });
-      setMessage(res.data?.message || 'Password reset successful. You can now sign in.');
+      const res = await authAPI.resetPassword({ token, new_password: passwordValue }, { skipErrorToast: true });
+      const successMessage = res.data?.message || 'Password reset successful. You can now sign in.';
+      setMessage(successMessage);
+      emitToast('success', successMessage);
       setTimeout(() => navigate('/login'), 1500);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Reset failed. The link may be invalid or expired.');
+      const errorMessage = err.response?.data?.detail || 'Reset failed. The link may be invalid or expired.';
+      setError(errorMessage);
+      emitToast('error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -68,22 +79,42 @@ export default function ResetPassword() {
             )}
 
             <div className="space-y-4">
-              <input
-                type="password"
-                required
-                className="appearance-none block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="New password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <input
-                type="password"
-                required
-                className="appearance-none block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Confirm new password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="New password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-xs font-medium text-blue-600"
+                  aria-label={showPassword ? 'Hide new password' : 'Show new password'}
+                >
+                  {showPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <div className="relative">
+                <input
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  required
+                  className="appearance-none block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute inset-y-0 right-0 px-3 flex items-center text-xs font-medium text-blue-600"
+                  aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'}
+                >
+                  {showConfirmPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
             </div>
 
             <div>
