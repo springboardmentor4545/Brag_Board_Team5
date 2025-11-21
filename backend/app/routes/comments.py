@@ -10,6 +10,7 @@ from app.schemas.comment_report import CommentReport as CommentReportSchema, Com
 from app.middleware.auth import get_current_active_user
 from app.models.comment_report import CommentReport as CommentReportModel
 from app.utils.notifications import create_notification
+from app.utils.responses import success_response
 import re
 from sqlalchemy.orm import joinedload
 
@@ -42,11 +43,35 @@ async def create_comment(
         mentioned_users = db.query(User).filter(User.id.in_(comment_data.mentions)).all()
         new_comment.mentions.extend(mentioned_users)
     else:
-        # Fallback: parse react-mentions style markup from content @[display](id)
-        mention_pattern = re.compile(r"@\[(.+?)\]\((\d+)\)")
+        # Fallback: parse encoded mentions from frontend (uses zero-width separators) or legacy react-mentions markup
+        zero_width_zero = "\u200B"
+        zero_width_one = "\u200C"
+        mention_start = "\u2060"
+        mention_end = "\u2061"
+        mention_pattern = re.compile(
+            rf"@\[(.+?)\]\((\d+)\)|@([^{mention_start}]+){mention_start}([{zero_width_zero}{zero_width_one}]+){mention_end}",
+            re.UNICODE,
+        )
         raw_ids = set()
         for m in mention_pattern.finditer(comment_data.content or ""):
-            raw_ids.add(int(m.group(2)))
+            if m.group(2):
+                raw_ids.add(int(m.group(2)))
+            elif m.group(4):
+                bitstring = (
+                    m.group(4).replace(zero_width_zero, "0").replace(zero_width_one, "1")
+                )
+                chars = []
+                for idx in range(0, len(bitstring), 7):
+                    chunk = bitstring[idx : idx + 7]
+                    if len(chunk) != 7:
+                        continue
+                    try:
+                        chars.append(chr(int(chunk, 2)))
+                    except ValueError:
+                        continue
+                decoded = "".join(chars)
+                if decoded.isdigit():
+                    raw_ids.add(int(decoded))
         if raw_ids:
             mentioned_users = db.query(User).filter(User.id.in_(raw_ids)).all()
             new_comment.mentions.extend(mentioned_users)
@@ -178,7 +203,7 @@ async def delete_comment(
     db.delete(comment)
     db.commit()
     
-    return {"message": "Comment deleted successfully"}
+    return success_response("Comment deleted successfully")
 
 
 @router.post("/comments/{comment_id}/report", response_model=CommentReportSchema)

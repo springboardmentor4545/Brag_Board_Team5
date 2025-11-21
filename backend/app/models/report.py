@@ -7,11 +7,11 @@ class Report(Base):
     __tablename__ = "reports"
 
     id = Column(Integer, primary_key=True, index=True)
-    shoutout_id = Column(Integer, ForeignKey("shoutouts.id", ondelete="CASCADE"), nullable=False)
-    reported_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    shoutout_id = Column(Integer, ForeignKey("shoutouts.id", ondelete="CASCADE"), nullable=False, index=True)
+    reported_by = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     reason = Column(Text, nullable=False)
-    status = Column(String(20), default="pending")
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String(20), default="pending", index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     shoutout = relationship("ShoutOut", back_populates="reports")
     reporter = relationship("User", back_populates="reports")

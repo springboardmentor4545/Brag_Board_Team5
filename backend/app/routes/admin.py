@@ -20,6 +20,7 @@ from app.schemas.department_change import (
     DepartmentChangeDecision,
 )
 from app.utils.notifications import create_notification
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -169,7 +170,7 @@ async def resolve_report(
 
     db.commit()
 
-    return {"message": f"Report {action} successfully"}
+    return success_response(f"Report {action} successfully")
 
 
 @router.post("/comment-reports/{report_id}/resolve")
@@ -199,7 +200,7 @@ async def resolve_comment_report(
 
     db.commit()
 
-    return {"message": f"Comment report {action} successfully"}
+    return success_response(f"Comment report {action} successfully")
 
 
 @router.get("/department-change-requests", response_model=List[DepartmentChangeSchema])
@@ -315,7 +316,7 @@ async def admin_delete_shoutout(
     db.delete(shoutout)
     db.commit()
     
-    return {"message": "Shoutout deleted successfully"}
+    return success_response("Shoutout deleted successfully")
 
 @router.get("/leaderboard")
 async def get_leaderboard(

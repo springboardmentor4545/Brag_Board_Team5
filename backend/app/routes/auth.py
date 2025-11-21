@@ -17,7 +17,9 @@ from app.utils.security import (
     get_password_hash,
     create_access_token,
     create_refresh_token,
-    decode_token
+    decode_token,
+    is_strong_password,
+    PASSWORD_POLICY_MESSAGE,
 )
 from app.models.email_verification import EmailVerification
 from app.models.password_reset import PasswordReset
@@ -31,6 +33,7 @@ from app.utils.email import (
 from datetime import datetime, timedelta, timezone
 import secrets
 from fastapi.responses import HTMLResponse
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -48,8 +51,13 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
     if not user_data.department or not user_data.department.strip():
         raise HTTPException(status_code=400, detail="Department cannot be empty")
 
+    normalized_email = user_data.email.strip().lower()
+    password_value = user_data.password.strip()
+    if not is_strong_password(password_value):
+        raise HTTPException(status_code=400, detail=PASSWORD_POLICY_MESSAGE)
+
     # ---- Check if user already exists ----
-    existing_user = db.query(User).filter(User.email == user_data.email).first()
+    existing_user = db.query(User).filter(User.email == normalized_email).first()
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -64,12 +72,12 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
         user_data.role = "employee"  # default role if not provided
 
     # ---- Hash password ----
-    hashed_password = get_password_hash(user_data.password)
+    hashed_password = get_password_hash(password_value)
 
     # ---- Create and save new user (unverified/inactive) ----
     new_user = User(
         name=user_data.name.strip(),
-        email=user_data.email.strip().lower(),
+        email=normalized_email,
         hashed_password=hashed_password,  # ✅ Correct field name
         department=user_data.department.strip(),
         role=user_data.role,  # ✅ persist role so admin guard works
@@ -98,13 +106,18 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
     # ---- Send verification email in background ----
     background_tasks.add_task(send_verification_email, new_user.email, new_user.name, token)
 
-    return {"message": "Registration successful. Please check your email to verify your account.", "requires_verification": True}
+    return {
+        "message": "Registration successful. Please check your email to verify your account.",
+        "requires_verification": True,
+        "success": True,
+    }
 
 
 # ---------------- LOGIN ROUTE ---------------- #
 @router.post("/login", response_model=Token)
 async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == login_data.email).first()
+    login_email = str(login_data.email).strip().lower()
+    user = db.query(User).filter(User.email == login_email).first()
 
     # ---- Verify user credentials ----
     if not user or not verify_password(login_data.password, user.hashed_password):
@@ -182,7 +195,7 @@ async def verify_email(token: str, background_tasks: BackgroundTasks, db: Sessio
         raise HTTPException(status_code=400, detail="Invalid verification token")
 
     if verification.consumed:
-        return {"message": "Email already verified"}
+        return success_response("Email already verified")
 
     now = datetime.now(timezone.utc)
     if verification.expires_at < now:
@@ -238,7 +251,7 @@ async def verify_email(token: str, background_tasks: BackgroundTasks, db: Sessio
             approval_token
         )
 
-    return {"message": message}
+    return success_response(message)
 
 
 @router.get("/company-approval", response_class=HTMLResponse)
@@ -297,7 +310,7 @@ async def forgot_password(req: ForgotPasswordRequest, background_tasks: Backgrou
     # Always return generic message to prevent user enumeration
     generic_response = {"message": "If that email exists, a reset link has been sent."}
     if not user:
-        return generic_response
+        return success_response(generic_response["message"])
 
     # Create reset token (1 hour expiry)
     token = secrets.token_urlsafe(32)
@@ -308,7 +321,7 @@ async def forgot_password(req: ForgotPasswordRequest, background_tasks: Backgrou
     db.commit()
 
     background_tasks.add_task(send_password_reset_email, user.email, user.name, token)
-    return generic_response
+    return success_response(generic_response["message"])
 
 
 # ---------------- RESET PASSWORD ---------------- #
@@ -327,10 +340,17 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    new_password = payload.new_password.strip()
+    if not is_strong_password(new_password):
+        raise HTTPException(status_code=400, detail=PASSWORD_POLICY_MESSAGE)
+
     # Update password
-    user.hashed_password = get_password_hash(payload.new_password)
+    user.hashed_password = get_password_hash(new_password)
     reset.consumed = True
     reset.consumed_at = now
     db.commit()
 
-    return {"message": "Password has been reset successfully"}
+    return {
+        "message": "Password has been reset successfully",
+        "success": True,
+    }

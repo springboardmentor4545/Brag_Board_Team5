@@ -13,6 +13,7 @@ from app.schemas.notification import (
     NotificationReadRequest,
 )
 from app.utils.notifications import mark_notification_read, mark_all_notifications_read
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
@@ -95,7 +96,10 @@ async def mark_notifications_read(
         mark_notification_read(notification)
 
     db.commit()
-    return {"updated": len(notifications)}
+    return success_response(
+        f"Marked {len(notifications)} notification(s) as read",
+        {"updated": len(notifications)},
+    )
 
 
 @router.post("/mark-all-read")
@@ -105,7 +109,10 @@ async def mark_all_notifications(
 ):
     updated = mark_all_notifications_read(db, user_id=current_user.id)
     db.commit()
-    return {"updated": updated}
+    return success_response(
+        f"Marked {updated} notification(s) as read",
+        {"updated": updated},
+    )
 
 
 @router.delete("")
@@ -119,4 +126,8 @@ async def delete_notifications(
         .delete(synchronize_session=False)
     )
     db.commit()
-    return {"deleted": deleted or 0}
+    deleted_count = deleted or 0
+    return success_response(
+        f"Deleted {deleted_count} notification(s)",
+        {"deleted": deleted_count},
+    )

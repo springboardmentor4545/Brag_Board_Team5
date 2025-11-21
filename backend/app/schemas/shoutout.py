@@ -1,10 +1,10 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
 
 class ShoutOutCreate(BaseModel):
     message: str
-    recipient_ids: List[int]
+    recipient_ids: List[int] = Field(default_factory=list)
 
 class ShoutOutUpdate(BaseModel):
     message: str

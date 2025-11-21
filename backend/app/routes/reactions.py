@@ -8,6 +8,7 @@ from sqlalchemy import func
 from app.schemas.reaction import ReactionCreate, ReactionSummary, ReactionUser
 from app.middleware.auth import get_current_active_user
 from app.utils.notifications import create_notification
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/shoutouts", tags=["reactions"])
 
@@ -36,10 +37,10 @@ async def add_reaction(
 
     if existing_reaction:
         if existing_reaction.type == reaction_data.type:
-            return {"message": "Reaction already exists"}
+            return success_response("Reaction already exists")
         existing_reaction.type = reaction_data.type
         db.commit()
-        return {"message": "Reaction updated successfully"}
+        return success_response("Reaction updated successfully")
 
     new_reaction = Reaction(
         shoutout_id=shoutout_id,
@@ -77,7 +78,7 @@ async def add_reaction(
 
     db.commit()
 
-    return {"message": "Reaction added successfully"}
+    return success_response("Reaction added successfully")
 
 @router.delete("/{shoutout_id}/reactions/{reaction_type}")
 async def remove_reaction(
@@ -102,7 +103,7 @@ async def remove_reaction(
     db.delete(reaction)
     db.commit()
     
-    return {"message": "Reaction removed successfully"}
+    return success_response("Reaction removed successfully")
 
 
 @router.get("/{shoutout_id}/reactions", response_model=ReactionSummary)

@@ -15,8 +15,8 @@ class CommentReport(Base):
     shoutout_id = Column(Integer, ForeignKey("shoutouts.id", ondelete="CASCADE"), nullable=False, index=True)
     reported_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     reason = Column(Text, nullable=False)
-    status = Column(String(20), default="pending", nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    status = Column(String(20), default="pending", nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     comment = relationship("Comment", back_populates="reports")
     reporter = relationship("User", back_populates="comment_reports")

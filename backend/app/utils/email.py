@@ -1,3 +1,4 @@
+import logging
 import os
 import smtplib
 from email.message import EmailMessage
@@ -11,6 +12,8 @@ EMAIL_FROM = os.getenv("EMAIL_FROM") or os.getenv("SMTP_FROM")
 APP_BASE_URL = os.getenv("APP_BASE_URL", "http://localhost:8000")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5000")
 COMPANY_APPROVER_EMAIL = os.getenv("COMPANY_APPROVER_EMAIL", "admin@bragboard.space")
+
+logger = logging.getLogger("app.email")
  
 _smtp_use_ssl_env = os.getenv("SMTP_USE_SSL")
 if _smtp_use_ssl_env is None:
@@ -74,10 +77,11 @@ def send_verification_email(to_email: str, name: str, token: str) -> None:
     """
  
     if not SMTP_HOST or not (EMAIL_FROM or SMTP_USERNAME):
-        # In development, print to console if SMTP is not configured
-        print("[Email] SMTP not configured. Would send to:", to_email)
-        print("Subject:", subject)
-        print("Body:\n", text)
+        # In development, log when SMTP is not configured so messages stay observable
+        logger.info(
+            "SMTP not configured. Skipping verification email.",
+            extra={"to": to_email, "subject": subject, "body": text},
+        )
         return
  
     msg = _build_message(subject, to_email, html, text)
@@ -108,9 +112,10 @@ def send_password_reset_email(to_email: str, name: str, token: str) -> None:
     """
  
     if not SMTP_HOST or not (EMAIL_FROM or SMTP_USERNAME):
-        print("[Email] SMTP not configured. Would send password reset to:", to_email)
-        print("Subject:", subject)
-        print("Body:\n", text)
+        logger.info(
+            "SMTP not configured. Skipping password reset email.",
+            extra={"to": to_email, "subject": subject, "body": text},
+        )
         return
  
     msg = _build_message(subject, to_email, html, text)
@@ -118,65 +123,66 @@ def send_password_reset_email(to_email: str, name: str, token: str) -> None:
  
  
 def send_company_approval_email(name: str, email: str, department: Optional[str], role: str, token: str) -> None:
-        """Notify company approvers about a newly verified user awaiting approval."""
-        if not COMPANY_APPROVER_EMAIL:
-                # Fail silently if no approver email configured
-                return
- 
-        approve_link = f"{APP_BASE_URL}/api/auth/company-approval?token={token}&action=approve"
-        reject_link = f"{APP_BASE_URL}/api/auth/company-approval?token={token}&action=reject"
- 
-        subject = "New employee waiting for approval"
-        department_display = department or "Not specified"
-        text = (
-                f"A new user has completed email verification.\n\n"
-                f"Name: {name}\n"
-                f"Email: {email}\n"
-                f"Department: {department_display}\n"
-                f"Role: {role}\n\n"
-                f"Approve: {approve_link}\n"
-                f"Reject: {reject_link}\n"
+    """Notify company approvers about a newly verified user awaiting approval."""
+    if not COMPANY_APPROVER_EMAIL:
+        # Fail silently if no approver email configured
+        return
+
+    approve_link = f"{APP_BASE_URL}/api/auth/company-approval?token={token}&action=approve"
+    reject_link = f"{APP_BASE_URL}/api/auth/company-approval?token={token}&action=reject"
+
+    subject = "New employee waiting for approval"
+    department_display = department or "Not specified"
+    text = (
+        f"A new user has completed email verification.\n\n"
+        f"Name: {name}\n"
+        f"Email: {email}\n"
+        f"Department: {department_display}\n"
+        f"Role: {role}\n\n"
+        f"Approve: {approve_link}\n"
+        f"Reject: {reject_link}\n"
+    )
+
+    html = f"""
+    <div style='font-family: Arial, sans-serif; line-height: 1.6;'>
+        <h2>New Employee Awaiting Approval</h2>
+        <p>A new user has completed email verification and is waiting for company approval.</p>
+        <table style='border-collapse: collapse; margin-bottom: 16px;'>
+            <tr>
+                <td style='font-weight:bold; padding:4px 12px;'>Name</td>
+                <td style='padding:4px 12px;'>{name}</td>
+            </tr>
+            <tr>
+                <td style='font-weight:bold; padding:4px 12px;'>Email</td>
+                <td style='padding:4px 12px;'>{email}</td>
+            </tr>
+            <tr>
+                <td style='font-weight:bold; padding:4px 12px;'>Department</td>
+                <td style='padding:4px 12px;'>{department_display}</td>
+            </tr>
+            <tr>
+                <td style='font-weight:bold; padding:4px 12px;'>Role</td>
+                <td style='padding:4px 12px;'>{role}</td>
+            </tr>
+        </table>
+        <p>Please choose an action:</p>
+        <p>
+            <a href="{approve_link}" style="background:#16a34a;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;margin-right:12px;display:inline-block">Approve</a>
+            <a href="{reject_link}" style="background:#dc2626;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Reject</a>
+        </p>
+        <p>If the buttons above do not work, use these links:</p>
+        <p>Approve: <a href="{approve_link}">{approve_link}</a></p>
+        <p>Reject: <a href="{reject_link}">{reject_link}</a></p>
+    </div>
+    """
+
+    if not SMTP_HOST or not (EMAIL_FROM or SMTP_USERNAME):
+        logger.info(
+            "SMTP not configured. Skipping company approval email.",
+            extra={"to": COMPANY_APPROVER_EMAIL, "subject": subject, "body": text},
         )
- 
-        html = f"""
-        <div style='font-family: Arial, sans-serif; line-height: 1.6;'>
-            <h2>New Employee Awaiting Approval</h2>
-            <p>A new user has completed email verification and is waiting for company approval.</p>
-            <table style='border-collapse: collapse; margin-bottom: 16px;'>
-                <tr>
-                    <td style='font-weight:bold; padding:4px 12px;'>Name</td>
-                    <td style='padding:4px 12px;'>{name}</td>
-                </tr>
-                <tr>
-                    <td style='font-weight:bold; padding:4px 12px;'>Email</td>
-                    <td style='padding:4px 12px;'>{email}</td>
-                </tr>
-                <tr>
-                    <td style='font-weight:bold; padding:4px 12px;'>Department</td>
-                    <td style='padding:4px 12px;'>{department_display}</td>
-                </tr>
-                <tr>
-                    <td style='font-weight:bold; padding:4px 12px;'>Role</td>
-                    <td style='padding:4px 12px;'>{role}</td>
-                </tr>
-            </table>
-            <p>Please choose an action:</p>
-            <p>
-                <a href="{approve_link}" style="background:#16a34a;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;margin-right:12px;display:inline-block">Approve</a>
-                <a href="{reject_link}" style="background:#dc2626;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;display:inline-block">Reject</a>
-            </p>
-            <p>If the buttons above do not work, use these links:</p>
-            <p>Approve: <a href="{approve_link}">{approve_link}</a></p>
-            <p>Reject: <a href="{reject_link}">{reject_link}</a></p>
-        </div>
-        """
- 
-        if not SMTP_HOST or not (EMAIL_FROM or SMTP_USERNAME):
-                print("[Email] SMTP not configured. Would notify:", COMPANY_APPROVER_EMAIL)
-                print("Subject:", subject)
-                print("Body:\n", text)
-                return
- 
-        msg = _build_message(subject, COMPANY_APPROVER_EMAIL, html, text)
- 
-        _send_message(msg)
+        return
+
+    msg = _build_message(subject, COMPANY_APPROVER_EMAIL, html, text)
+
+    _send_message(msg)

@@ -1,4 +1,5 @@
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from jose import JWTError, jwt
@@ -12,6 +13,13 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 # Password hashing configuration
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Password strength policy
+PASSWORD_REGEX = re.compile(r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$")
+PASSWORD_POLICY_MESSAGE = (
+    "Password must be at least 8 characters long and include uppercase, lowercase, "
+    "number, and special character."
+)
 
 
 # ---------------- PASSWORD UTILS ---------------- #
@@ -28,6 +36,13 @@ def get_password_hash(password: str) -> str:
     # bcrypt ignores characters beyond 72 bytes, so we truncate safely
     password = password[:72]
     return pwd_context.hash(password)
+
+
+def is_strong_password(password: str) -> bool:
+    """Return True when password matches the defined strength policy."""
+    if not isinstance(password, str):
+        return False
+    return bool(PASSWORD_REGEX.match(password.strip()))
 
 
 # ---------------- TOKEN UTILS ---------------- #

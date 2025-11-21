@@ -11,6 +11,7 @@ from app.schemas.shoutout import ShoutOut as ShoutOutSchema, ShoutOutCreate, Sho
 import os, secrets, shutil
 from app.middleware.auth import get_current_active_user
 from app.utils.notifications import create_notification
+from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/shoutouts", tags=["shoutouts"])
 
@@ -74,7 +75,7 @@ def format_shoutout(shoutout, user_id, db):
 async def create_shoutout(
     request: Request,
     message: str = Form(...),
-    recipient_ids: List[int] = Form(...),
+    recipient_ids: Optional[List[int]] = Form(None),
     files: List[UploadFile] = File(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -91,18 +92,34 @@ async def create_shoutout(
     db.flush()
 
     # Validate recipients
-    recipient_objects = []
-    for recipient_id in recipient_ids:
-        recipient = db.query(User).filter(User.id == recipient_id).first()
-        if not recipient:
-            raise HTTPException(status_code=404, detail=f"Recipient with id {recipient_id} not found")
-        if recipient.id == current_user.id:
-            raise HTTPException(status_code=400, detail="You cannot give a shoutout to yourself")
-        if recipient.department != current_user.department:
-            raise HTTPException(status_code=403, detail="Can only tag users from your own department")
-        shoutout_recipient = ShoutOutRecipient(shoutout_id=new_shoutout.id, recipient_id=recipient_id)
-        db.add(shoutout_recipient)
-        recipient_objects.append(recipient)
+    recipient_ids = recipient_ids or []
+
+    try:
+        unique_recipient_ids = {int(rid) for rid in recipient_ids}
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Recipient IDs must be integers")
+    if current_user.id in unique_recipient_ids:
+        raise HTTPException(status_code=400, detail="You cannot give a shoutout to yourself")
+
+    recipient_objects: List[User] = []
+    if unique_recipient_ids:
+        recipient_objects = (
+            db.query(User)
+            .filter(User.id.in_(unique_recipient_ids))
+            .all()
+        )
+
+        found_ids = {recipient.id for recipient in recipient_objects}
+        missing = unique_recipient_ids - found_ids
+        if missing:
+            missing_id = next(iter(missing))
+            raise HTTPException(status_code=404, detail=f"Recipient with id {missing_id} not found")
+
+        for recipient in recipient_objects:
+            if recipient.department != current_user.department:
+                raise HTTPException(status_code=403, detail="Can only tag users from your own department")
+            shoutout_recipient = ShoutOutRecipient(shoutout_id=new_shoutout.id, recipient_id=recipient.id)
+            db.add(shoutout_recipient)
 
     # Handle file uploads (optional)
     saved_files = []
@@ -283,4 +300,4 @@ async def delete_shoutout(
     db.delete(shoutout)
     db.commit()
     
-    return {"message": "Shoutout deleted successfully"}
+    return success_response("Shoutout deleted successfully")

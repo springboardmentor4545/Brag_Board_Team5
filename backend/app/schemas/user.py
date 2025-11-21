@@ -42,7 +42,7 @@ class TokenData(BaseModel):
     email: Optional[str] = None
 
 class LoginRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
 
 class RefreshRequest(BaseModel):
@@ -52,6 +52,7 @@ class RefreshRequest(BaseModel):
 class RegistrationResponse(BaseModel):
     message: str
     requires_verification: bool = True
+    success: bool = True
 
 
 class ResendVerificationRequest(BaseModel):
@@ -68,4 +69,5 @@ class ResetPasswordRequest(BaseModel):
 
 
 class ResetPasswordResponse(BaseModel):
+    success: bool = True
     message: str

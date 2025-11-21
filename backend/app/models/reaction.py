@@ -9,8 +9,8 @@ class Reaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     shoutout_id = Column(Integer, ForeignKey("shoutouts.id", ondelete="CASCADE"), nullable=False, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    type = Column(String(20), nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    type = Column(String(20), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
 
     __table_args__ = (UniqueConstraint('shoutout_id', 'user_id', 'type', name='_shoutout_user_type_uc'),)
 
