@@ -137,7 +137,7 @@ export default function Feed() {
         )}
         <div className="mb-4 flex flex-col gap-4">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Departments Feed</h1>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Quantum Stream</h1>
             <div className="flex flex-wrap gap-2 sm:justify-end">
               <button
                 type="button"

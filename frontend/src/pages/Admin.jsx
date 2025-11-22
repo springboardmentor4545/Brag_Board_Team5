@@ -350,6 +350,73 @@ export default function Admin() {
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Shout-Outs</h3>
             <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{analytics?.total_shoutouts || 0}</p>
           </div>
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow md:col-span-2 lg:col-span-2">
+            <h5 className="text-x font-bold text-gray-900 dark:text-gray-100">Data Exports</h5>
+            {/* <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Download admin logs and reported items as CSV or PDF. Apply an optional date range before exporting.</p> */}
+            <div className="flex flex-wrap items-end gap-3 mt-4">
+              <div className="flex flex-col">
+                <label htmlFor="export-start-date" className="text-sm text-gray-600 dark:text-gray-400 mb-1">Start date</label>
+                <input
+                  id="export-start-date"
+                  type="date"
+                  value={exportStartDate}
+                  onChange={(e) => setExportStartDate(e.target.value)}
+                  className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label htmlFor="export-end-date" className="text-sm text-gray-600 dark:text-gray-400 mb-1">End date</label>
+                <input
+                  id="export-end-date"
+                  type="date"
+                  value={exportEndDate}
+                  onChange={(e) => setExportEndDate(e.target.value)}
+                  className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label htmlFor="export-format" className="text-sm text-gray-600 dark:text-gray-400 mb-1">Format</label>
+                <select
+                  id="export-format"
+                  value={exportFormat}
+                  onChange={(e) => setExportFormat(e.target.value)}
+                  className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+                >
+                  <option value="csv">CSV</option>
+                  <option value="pdf">PDF</option>
+                </select>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-sm invisible mb-1 select-none" aria-hidden="true">placeholder</span>
+                <button
+                  type="button"
+                  onClick={() => handleExportDownload('logs')}
+                  disabled={exporting === 'logs'}
+                  className={`px-4 py-2 rounded text-white text-sm ${exporting === 'logs' ? 'bg-blue-500/70 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                >
+                  {exporting === 'logs' ? 'Preparing...' : 'Admin Logs'}
+                </button>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3 mt-4">
+              <button
+                type="button"
+                onClick={() => handleExportDownload('shoutoutReports')}
+                disabled={exporting === 'shoutoutReports'}
+                className={`px-4 py-2 rounded text-white text-sm ${exporting === 'shoutoutReports' ? 'bg-indigo-500/70 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+              >
+                {exporting === 'shoutoutReports' ? 'Preparing...' : 'Shout-out Reports'}
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportDownload('commentReports')}
+                disabled={exporting === 'commentReports'}
+                className={`px-4 py-2 rounded text-white text-sm ${exporting === 'commentReports' ? 'bg-purple-500/70 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+              >
+                {exporting === 'commentReports' ? 'Preparing...' : 'Comment Reports'}
+              </button>
+            </div>
+          </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
@@ -390,71 +457,6 @@ export default function Admin() {
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Department Stats</h2>
           <DepartmentStatsChart data={analytics?.department_stats} />
-        </div>
-
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Data Exports</h2>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Download admin logs and reported items as CSV or PDF. Apply an optional date range before exporting.</p>
-          <div className="flex flex-wrap items-end gap-4 mt-4">
-            <div className="flex flex-col">
-              <label htmlFor="export-start-date" className="text-sm text-gray-600 dark:text-gray-400 mb-1">Start date</label>
-              <input
-                id="export-start-date"
-                type="date"
-                value={exportStartDate}
-                onChange={(e) => setExportStartDate(e.target.value)}
-                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
-              />
-            </div>
-            <div className="flex flex-col">
-              <label htmlFor="export-end-date" className="text-sm text-gray-600 dark:text-gray-400 mb-1">End date</label>
-              <input
-                id="export-end-date"
-                type="date"
-                value={exportEndDate}
-                onChange={(e) => setExportEndDate(e.target.value)}
-                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
-              />
-            </div>
-            <div className="flex flex-col">
-              <label htmlFor="export-format" className="text-sm text-gray-600 dark:text-gray-400 mb-1">Format</label>
-              <select
-                id="export-format"
-                value={exportFormat}
-                onChange={(e) => setExportFormat(e.target.value)}
-                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
-              >
-                <option value="csv">CSV</option>
-                <option value="pdf">PDF</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-3 mt-6">
-            <button
-              type="button"
-              onClick={() => handleExportDownload('logs')}
-              disabled={exporting === 'logs'}
-              className={`px-4 py-2 rounded text-white text-sm ${exporting === 'logs' ? 'bg-blue-500/70 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
-            >
-              {exporting === 'logs' ? 'Preparing...' : 'Download Admin Logs'}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleExportDownload('shoutoutReports')}
-              disabled={exporting === 'shoutoutReports'}
-              className={`px-4 py-2 rounded text-white text-sm ${exporting === 'shoutoutReports' ? 'bg-indigo-500/70 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
-            >
-              {exporting === 'shoutoutReports' ? 'Preparing...' : 'Download Shout-out Reports'}
-            </button>
-            <button
-              type="button"
-              onClick={() => handleExportDownload('commentReports')}
-              disabled={exporting === 'commentReports'}
-              className={`px-4 py-2 rounded text-white text-sm ${exporting === 'commentReports' ? 'bg-purple-500/70 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
-            >
-              {exporting === 'commentReports' ? 'Preparing...' : 'Download Comment Reports'}
-            </button>
-          </div>
         </div>
 
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">
