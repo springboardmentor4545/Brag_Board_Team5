@@ -134,6 +134,17 @@ async def login(login_data: LoginRequest, db: Session = Depends(get_db)):
         )
 
     if not user.company_verified:
+        latest_request = (
+            db.query(CompanyApprovalRequest)
+            .filter(CompanyApprovalRequest.user_id == user.id)
+            .order_by(CompanyApprovalRequest.created_at.desc())
+            .first()
+        )
+        if latest_request and latest_request.status == "rejected":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Rejected by company"
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Waiting for company verification"
@@ -298,9 +309,10 @@ async def handle_company_approval(token: str, action: str, request: Request, db:
     # Reject flow: remove the user record and mark the request
     approval_request.status = "rejected"
     approval_request.resolved_at = now
-    db.delete(user)
+    user.company_verified = False
+    user.is_active = False
     db.commit()
-    return HTMLResponse("<h2>User Rejected</h2><p>The user has been removed from the system.</p>", status_code=200)
+    return HTMLResponse("<h2>User Rejected</h2><p>The user will not be able to sign in.</p>", status_code=200)
 
 
 # ---------------- FORGOT PASSWORD ---------------- #

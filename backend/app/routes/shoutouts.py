@@ -124,7 +124,11 @@ async def create_shoutout(
     if unique_recipient_ids:
         recipient_objects = (
             db.query(User)
-            .filter(User.id.in_(unique_recipient_ids))
+            .filter(
+                User.id.in_(unique_recipient_ids),
+                User.is_active == True,
+                User.company_verified == True,
+            )
             .all()
         )
 
@@ -132,7 +136,7 @@ async def create_shoutout(
         missing = unique_recipient_ids - found_ids
         if missing:
             missing_id = next(iter(missing))
-            raise HTTPException(status_code=404, detail=f"Recipient with id {missing_id} not found")
+            raise HTTPException(status_code=404, detail=f"Recipient with id {missing_id} not available")
 
         for recipient in recipient_objects:
             shoutout_recipient = ShoutOutRecipient(shoutout_id=new_shoutout.id, recipient_id=recipient.id)

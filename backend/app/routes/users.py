@@ -137,7 +137,15 @@ async def search_users(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    users = db.query(User).filter(User.name.ilike(f"%{query}%")).all()
+    users = (
+        db.query(User)
+        .filter(
+            User.name.ilike(f"%{query}%"),
+            User.is_active == True,
+            User.company_verified == True,
+        )
+        .all()
+    )
     return users
 
 @router.get("", response_model=List[UserSchema])
@@ -146,7 +154,7 @@ async def get_users(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    query = db.query(User).filter(User.is_active == True)
+    query = db.query(User).filter(User.is_active == True, User.company_verified == True)
     
     if department:
         query = query.filter(User.department == department)

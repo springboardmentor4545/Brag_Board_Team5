@@ -40,7 +40,15 @@ async def create_comment(
     # Handle mentions
     mentioned_users = []
     if comment_data.mentions:
-        mentioned_users = db.query(User).filter(User.id.in_(comment_data.mentions)).all()
+        mentioned_users = (
+            db.query(User)
+            .filter(
+                User.id.in_(comment_data.mentions),
+                User.is_active == True,
+                User.company_verified == True,
+            )
+            .all()
+        )
         new_comment.mentions.extend(mentioned_users)
     else:
         # Fallback: parse encoded mentions from frontend (uses zero-width separators) or legacy react-mentions markup
@@ -73,7 +81,15 @@ async def create_comment(
                 if decoded.isdigit():
                     raw_ids.add(int(decoded))
         if raw_ids:
-            mentioned_users = db.query(User).filter(User.id.in_(raw_ids)).all()
+            mentioned_users = (
+                db.query(User)
+                .filter(
+                    User.id.in_(raw_ids),
+                    User.is_active == True,
+                    User.company_verified == True,
+                )
+                .all()
+            )
             new_comment.mentions.extend(mentioned_users)
     
     db.add(new_comment)

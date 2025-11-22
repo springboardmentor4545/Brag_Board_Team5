@@ -37,7 +37,11 @@ async def get_analytics(
     admin: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
-    total_users = db.query(func.count(User.id)).scalar()
+    total_users = (
+        db.query(func.count(User.id))
+        .filter(User.is_active == True, User.company_verified == True)
+        .scalar()
+    )
     total_shoutouts = db.query(func.count(ShoutOut.id)).scalar()
     
     top_contributors = (
