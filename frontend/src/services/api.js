@@ -118,8 +118,8 @@ export const shoutoutAPI = {
 export const commentAPI = {
   create: (shoutoutId, data) => api.post(`/shoutouts/${shoutoutId}/comments`, data),
   getAll: (shoutoutId) => api.get(`/shoutouts/${shoutoutId}/comments`),
-  update: (commentId, data) => api.put(`/shoutouts/comments/${commentId}`, data),
-  delete: (commentId) => api.delete(`/shoutouts/comments/${commentId}`),
+  update: (commentId, data, config = {}) => api.put(`/shoutouts/comments/${commentId}`, data, config),
+  delete: (commentId, config = {}) => api.delete(`/shoutouts/comments/${commentId}`, config),
   report: (commentId, reason) => api.post(`/shoutouts/comments/${commentId}/report`, { reason }),
 };
 

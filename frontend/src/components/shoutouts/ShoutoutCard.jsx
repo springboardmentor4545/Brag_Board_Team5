@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { commentAPI, reactionAPI, adminAPI, shoutoutAPI } from '../../services/api';
+import { commentAPI, reactionAPI, adminAPI, shoutoutAPI, userAPI } from '../../services/api';
 import CommentInput from './CommentInput';
 import Avatar from '../common/Avatar';
-import { extractMentionIds, parseMentions } from '../../utils/mentions';
+import { extractMentionIds, parseMentions, encodeMentionPayload } from '../../utils/mentions';
 import { emitToast } from '../../utils/toast.js';
 import { useAuth } from '../../context/AuthContext';
 
@@ -41,10 +41,15 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const [deleteError, setDeleteError] = useState('');
+  const [activeCommentMenu, setActiveCommentMenu] = useState(null);
+  const [commentEditState, setCommentEditState] = useState({ commentId: null, value: '', submitting: false, error: '' });
+  const [commentDeleteState, setCommentDeleteState] = useState({ open: false, commentId: null, submitting: false, error: '' });
+  const [commentEditMention, setCommentEditMention] = useState({ query: '', suggestions: [], activeIndex: 0, show: false });
   // no local loading state required for now
   const reactionMenuTimeoutRef = useRef(null);
   const commentFeedbackTimeoutRef = useRef(null);
   const actionsMenuRef = useRef(null);
+  const commentEditTextareaRef = useRef(null);
   const isOwner = Boolean(user?.id) && (user?.id === shoutout.sender_id || user?.id === shoutout.sender?.id);
 
   useEffect(() => () => {
@@ -79,6 +84,67 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
       document.removeEventListener('keydown', handleEscape);
     };
   }, [actionsMenuOpen]);
+
+  useEffect(() => {
+    if (activeCommentMenu == null) return undefined;
+    const handleOutside = (event) => {
+      if (!event.target.closest('[data-comment-menu]')) {
+        setActiveCommentMenu(null);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setActiveCommentMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [activeCommentMenu]);
+
+  useEffect(() => {
+    if (!commentEditState.commentId) {
+      if (commentEditMention.show || commentEditMention.query) {
+        setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+      }
+      return;
+    }
+
+    const query = commentEditMention.query;
+    if (!query) {
+      if (commentEditMention.suggestions.length || commentEditMention.show) {
+        setCommentEditMention((state) => ({ ...state, suggestions: [], show: false, activeIndex: 0 }));
+      }
+      return;
+    }
+
+    let cancelled = false;
+    const fetchSuggestions = async () => {
+      try {
+        const { data } = await userAPI.search(query);
+        if (cancelled) return;
+        setCommentEditMention((state) => ({
+          ...state,
+          suggestions: (data || []).map((user) => ({ id: user.id, name: user.name })),
+          activeIndex: 0,
+          show: true,
+        }));
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Failed to fetch mention suggestions while editing comment:', error);
+          setCommentEditMention((state) => ({ ...state, suggestions: [], show: false }));
+        }
+      }
+    };
+
+    fetchSuggestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [commentEditMention.query, commentEditState.commentId]);
 
   const openReactionMenu = () => {
     if (reactionMenuTimeoutRef.current) {
@@ -288,6 +354,169 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
     }
   };
 
+  const openReportCommentModal = (comment) => {
+    setActiveCommentMenu(null);
+    setReportModal({
+      ...createInitialReportModalState(),
+      open: true,
+      targetType: 'comment',
+      targetId: comment.id,
+      context: {
+        preview: comment.content,
+        author: comment.user?.name,
+      },
+    });
+  };
+
+  const startEditComment = (comment) => {
+    setCommentEditState({ commentId: comment.id, value: comment.content || '', submitting: false, error: '' });
+    setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+    setActiveCommentMenu(null);
+  };
+
+  const cancelEditComment = () => {
+    setCommentEditState({ commentId: null, value: '', submitting: false, error: '' });
+    setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+    if (commentEditTextareaRef.current) {
+      commentEditTextareaRef.current.blur();
+    }
+  };
+
+  const handleCommentEditSubmit = async (event) => {
+    event.preventDefault();
+    const { commentId } = commentEditState;
+    if (!commentId) {
+      return;
+    }
+    const trimmed = (commentEditState.value || '').trim();
+    if (!trimmed) {
+      setCommentEditState((state) => ({ ...state, error: 'Comment cannot be empty.' }));
+      return;
+    }
+    setCommentEditState((state) => ({ ...state, submitting: true, error: '' }));
+    try {
+      const response = await commentAPI.update(commentId, { content: trimmed }, { skipErrorToast: true });
+      const updatedComment = response.data;
+      setComments((prev) => prev.map((comment) => (comment.id === updatedComment.id ? { ...comment, ...updatedComment } : comment)));
+      emitToast('success', 'Comment updated.');
+      cancelEditComment();
+      setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Failed to update comment.';
+      emitToast('error', detail);
+      setCommentEditState((state) => (state.commentId === commentId ? { ...state, error: detail } : state));
+    } finally {
+      setCommentEditState((state) => (state.commentId === commentId ? { ...state, submitting: false } : state));
+    }
+  };
+
+  const handleCommentEditChange = (event) => {
+    const value = event.target.value;
+    const caret = event.target.selectionStart;
+    setCommentEditState((state) => ({ ...state, value, error: '' }));
+    const triggerIndex = value.lastIndexOf('@', caret - 1);
+    if (triggerIndex >= 0) {
+      const slice = value.slice(triggerIndex + 1, caret);
+      if (/^[A-Za-z0-9_]{0,30}$/.test(slice)) {
+        setCommentEditMention((state) => ({ ...state, query: slice, show: true }));
+        return;
+      }
+    }
+    if (commentEditMention.query || commentEditMention.show) {
+      setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+    }
+  };
+
+  const insertMentionIntoEdit = (user) => {
+    const textarea = commentEditTextareaRef.current;
+    setCommentEditState((state) => {
+      const currentText = state.value || '';
+      const caretPosition = textarea ? textarea.selectionStart : currentText.length;
+      const triggerIndex = currentText.lastIndexOf('@', caretPosition - 1);
+      if (triggerIndex < 0) {
+        return state;
+      }
+      const before = currentText.slice(0, triggerIndex);
+      const after = currentText.slice(caretPosition);
+      const encodedMention = `@${user.name}${encodeMentionPayload(user.id)}`;
+      const nextValue = `${before}${encodedMention} ${after}`;
+
+      requestAnimationFrame(() => {
+        if (textarea) {
+          const newPosition = before.length + encodedMention.length + 1;
+          textarea.focus();
+          textarea.selectionStart = newPosition;
+          textarea.selectionEnd = newPosition;
+        }
+      });
+
+      return { ...state, value: nextValue, error: '' };
+    });
+    setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+  };
+
+  const handleCommentEditKeyDown = (event) => {
+    if (!commentEditMention.show || !commentEditMention.suggestions.length) {
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setCommentEditMention((state) => ({
+        ...state,
+        activeIndex: (state.activeIndex + 1) % state.suggestions.length,
+      }));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setCommentEditMention((state) => ({
+        ...state,
+        activeIndex: (state.activeIndex - 1 + state.suggestions.length) % state.suggestions.length,
+      }));
+    } else if (event.key === 'Enter') {
+      if (commentEditMention.query) {
+        event.preventDefault();
+        const selected = commentEditMention.suggestions[commentEditMention.activeIndex];
+        if (selected) {
+          insertMentionIntoEdit(selected);
+        }
+      }
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
+    }
+  };
+
+  const openDeleteCommentModal = (comment) => {
+    const ownerId = comment?.user?.id ?? comment?.user_id;
+    if (!user?.id || ownerId !== user.id) {
+      return;
+    }
+    setCommentDeleteState({ open: true, commentId: comment.id, submitting: false, error: '' });
+    setActiveCommentMenu(null);
+  };
+
+  const closeDeleteCommentModal = () => {
+    setCommentDeleteState({ open: false, commentId: null, submitting: false, error: '' });
+  };
+
+  const handleDeleteComment = async () => {
+    const { commentId } = commentDeleteState;
+    if (!commentId) {
+      return;
+    }
+    setCommentDeleteState((state) => ({ ...state, submitting: true, error: '' }));
+    try {
+      await commentAPI.delete(commentId, { skipErrorToast: true });
+      setComments((prev) => prev.filter((comment) => comment.id !== commentId));
+      emitToast('success', 'Comment deleted.');
+      closeDeleteCommentModal();
+      onRefresh?.();
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Failed to delete comment.';
+      emitToast('error', detail);
+      setCommentDeleteState((state) => (state.commentId === commentId ? { ...state, error: detail, submitting: false } : state));
+    }
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' at ' + date.toLocaleTimeString();
@@ -301,6 +530,15 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   const userReaction = REACTION_TYPES.find((reaction) => (shoutout.user_reactions || []).includes(reaction.type));
 
   const primaryReactionType = userReaction?.type || 'like';
+  const createdAtLabel = formatDate(shoutout.created_at);
+  let updatedAtLabel = null;
+  if (shoutout.updated_at) {
+    const createdTime = new Date(shoutout.created_at).getTime();
+    const updatedTime = new Date(shoutout.updated_at).getTime();
+    if (!Number.isNaN(createdTime) && !Number.isNaN(updatedTime) && Math.abs(updatedTime - createdTime) > 1000) {
+      updatedAtLabel = formatDate(shoutout.updated_at);
+    }
+  }
 
   return (
   <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow p-4 sm:p-6 card">
@@ -315,7 +553,10 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
               {shoutout.sender?.department && (
                 <p className="text-xs text-gray-500 dark:text-gray-400">{shoutout.sender.department}</p>
               )}
-              <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(shoutout.created_at)}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{createdAtLabel}</p>
+              {updatedAtLabel && (
+                <p className="text-xs text-gray-500 dark:text-gray-400 italic">Updated {updatedAtLabel}</p>
+              )}
             </div>
             {user && (
               <div ref={actionsMenuRef} className="relative">
@@ -480,40 +721,138 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
       {showComments && (
         <div className="mt-4 border-t border-gray-200 dark:border-gray-800 pt-4">
           <div className="space-y-3 mb-4">
-            {comments.map((comment) => (
-              <div key={comment.id} className="flex space-x-2">
-                <div className="flex-shrink-0">
-                  <Avatar src={comment.user?.avatar_url} name={comment.user?.name} size="sm" />
-                </div>
-                <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center space-x-2">
-                      <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{comment.user?.name || 'Unknown'}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{formatDate(comment.created_at)}</p>
-                    </div>
-                    <button
-                      onClick={() =>
-                        setReportModal({
-                          ...createInitialReportModalState(),
-                          open: true,
-                          targetType: 'comment',
-                          targetId: comment.id,
-                          context: {
-                            preview: comment.content,
-                            author: comment.user?.name,
-                          },
-                        })
-                      }
-                      className="text-xs text-red-600 hover:text-red-700"
-                      title="Report this comment"
-                    >
-                      Report
-                    </button>
+            {comments.map((comment) => {
+              const ownerId = comment?.user?.id ?? comment?.user_id;
+              const isCommentOwner = Boolean(user?.id) && ownerId === user.id;
+              const isMenuOpen = activeCommentMenu === comment.id;
+              const isEditingComment = commentEditState.commentId === comment.id;
+              const createdLabel = formatDate(comment.created_at);
+              let editedLabel = null;
+              if (comment.updated_at) {
+                const createdTime = new Date(comment.created_at).getTime();
+                const updatedTime = new Date(comment.updated_at).getTime();
+                if (!Number.isNaN(createdTime) && !Number.isNaN(updatedTime) && Math.abs(updatedTime - createdTime) > 1000) {
+                  editedLabel = formatDate(comment.updated_at);
+                }
+              }
+              return (
+                <div key={comment.id} className="flex space-x-2">
+                  <div className="flex-shrink-0">
+                    <Avatar src={comment.user?.avatar_url} name={comment.user?.name} size="sm" />
                   </div>
-                  <p className="text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">{renderMentions(comment.content)}</p>
+                  <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{comment.user?.name || 'Unknown'}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          {createdLabel}
+                          {editedLabel && (
+                            <span className="ml-2 italic text-gray-500 dark:text-gray-400">Updated {editedLabel}</span>
+                          )}
+                        </p>
+                      </div>
+                      {user && (
+                        <div data-comment-menu={comment.id} className="relative">
+                          <button
+                            type="button"
+                            onClick={() => setActiveCommentMenu((prev) => (prev === comment.id ? null : comment.id))}
+                            className="p-1.5 rounded-full text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-haspopup="true"
+                            aria-expanded={isMenuOpen}
+                            aria-label="Comment actions"
+                          >
+                            ⋮
+                          </button>
+                          {isMenuOpen && (
+                            <div className="absolute right-0 mt-2 w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg z-20">
+                              {isCommentOwner && (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditComment(comment)}
+                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                  >
+                                    Edit comment
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => openDeleteCommentModal(comment)}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                  >
+                                    Delete comment
+                                  </button>
+                                </>
+                              )}
+                              {!isCommentOwner && (
+                                <button
+                                  type="button"
+                                  onClick={() => openReportCommentModal(comment)}
+                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                >
+                                  Report comment
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {isEditingComment ? (
+                      <form onSubmit={handleCommentEditSubmit} className="mt-2 space-y-2">
+                        <div className="relative">
+                          <textarea
+                            ref={commentEditTextareaRef}
+                            value={commentEditState.value}
+                            onChange={handleCommentEditChange}
+                            onKeyDown={handleCommentEditKeyDown}
+                            rows={3}
+                            className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                            placeholder="Update your comment"
+                          />
+                          {commentEditMention.show && commentEditMention.suggestions.length > 0 && (
+                            <ul className="absolute left-0 right-0 mt-1 max-h-56 overflow-y-auto bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-md shadow z-30 text-sm">
+                              {commentEditMention.suggestions.map((suggestion, idx) => (
+                                <li
+                                  key={suggestion.id}
+                                  onMouseDown={(event) => {
+                                    event.preventDefault();
+                                    insertMentionIntoEdit(suggestion);
+                                  }}
+                                  className={`px-3 py-2 cursor-pointer ${idx === commentEditMention.activeIndex ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-900 dark:text-gray-100'}`}
+                                >
+                                  @{suggestion.name}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                        {commentEditState.error && (
+                          <p className="text-xs text-red-600 dark:text-red-400">{commentEditState.error}</p>
+                        )}
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={cancelEditComment}
+                            className="px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={commentEditState.submitting}
+                            className="px-3 py-1.5 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                          >
+                            {commentEditState.submitting ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <p className="mt-2 text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">{renderMentions(comment.content)}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
           <CommentInput
             value={commentText}
@@ -618,6 +957,45 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
                 className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
               >
                 {deleteSubmitting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {commentDeleteState.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Delete Comment</h3>
+              <button
+                type="button"
+                onClick={closeDeleteCommentModal}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close delete comment dialog"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-200">Are you sure you want to delete this comment? This action cannot be undone.</p>
+            {commentDeleteState.error && (
+              <p className="mt-3 text-sm text-red-600 dark:text-red-400">{commentDeleteState.error}</p>
+            )}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteCommentModal}
+                className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteComment}
+                disabled={commentDeleteState.submitting}
+                className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {commentDeleteState.submitting ? 'Deleting…' : 'Delete'}
               </button>
             </div>
           </div>
