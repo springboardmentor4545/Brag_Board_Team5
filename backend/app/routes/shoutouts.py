@@ -75,11 +75,13 @@ def format_shoutout(shoutout, user_id, db):
 async def create_shoutout(
     request: Request,
     message: str = Form(...),
-    recipient_ids: Optional[List[int]] = Form(None),
     files: List[UploadFile] = File(None),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
+    form_data = await request.form()
+    raw_recipient_ids = form_data.getlist("recipient_ids") if hasattr(form_data, "getlist") else []
+
     # Validate message
     if not message.strip():
         raise HTTPException(status_code=400, detail="Shoutout message cannot be empty")
@@ -92,10 +94,27 @@ async def create_shoutout(
     db.flush()
 
     # Validate recipients
-    recipient_ids = recipient_ids or []
+    raw_recipient_ids = raw_recipient_ids or []
 
     try:
-        unique_recipient_ids = {int(rid) for rid in recipient_ids}
+        unique_recipient_ids: set[int] = set()
+        for raw in raw_recipient_ids:
+            if raw is None:
+                continue
+            if isinstance(raw, (list, tuple)):
+                for item in raw:
+                    unique_recipient_ids.add(int(item))
+                continue
+            text = str(raw).strip()
+            if not text:
+                continue
+            if "," in text:
+                for piece in text.split(","):
+                    piece = piece.strip()
+                    if piece:
+                        unique_recipient_ids.add(int(piece))
+            else:
+                unique_recipient_ids.add(int(text))
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Recipient IDs must be integers")
     if current_user.id in unique_recipient_ids:
@@ -116,8 +135,6 @@ async def create_shoutout(
             raise HTTPException(status_code=404, detail=f"Recipient with id {missing_id} not found")
 
         for recipient in recipient_objects:
-            if recipient.department != current_user.department:
-                raise HTTPException(status_code=403, detail="Can only tag users from your own department")
             shoutout_recipient = ShoutOutRecipient(shoutout_id=new_shoutout.id, recipient_id=recipient.id)
             db.add(shoutout_recipient)
 
