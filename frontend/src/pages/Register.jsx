@@ -1,7 +1,59 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { isValidEmail, isStrongPassword, PASSWORD_REQUIREMENTS } from '../utils/validation';
+
+const PASSWORD_RULES = [
+  { key: 'length', present: 'Includes at least 8 characters', missing: 'Add at least 8 characters', summary: '8 characters' },
+  { key: 'upper', present: 'Contains an uppercase letter', missing: 'Add an uppercase letter', summary: 'uppercase letter' },
+  { key: 'lower', present: 'Contains a lowercase letter', missing: 'Add a lowercase letter', summary: 'lowercase letter' },
+  { key: 'number', present: 'Contains a number', missing: 'Add a number', summary: 'number' },
+  { key: 'special', present: 'Contains a special character (!@#$ etc.)', missing: 'Add a special character (!@#$ etc.)', summary: 'special character' },
+];
+
+const evaluatePassword = (value = '') => ({
+  length: value.length >= 8,
+  upper: /[A-Z]/.test(value),
+  lower: /[a-z]/.test(value),
+  number: /\d/.test(value),
+  special: /[^A-Za-z0-9]/.test(value),
+});
+
+const determineStrength = (checks) => {
+  const total = Object.values(checks || {}).filter(Boolean).length;
+  if (total === 0) {
+    return {
+      label: 'Start typing a password',
+      percentage: 0,
+      barClass: 'bg-gray-300',
+      textClass: 'text-gray-500 dark:text-gray-400',
+    };
+  }
+  const percentage = Math.min(total, 5) * 20;
+  if (total <= 2) {
+    return {
+      label: 'Password strength: Weak',
+      percentage,
+      barClass: 'bg-red-500',
+      textClass: 'text-red-600 dark:text-red-400',
+    };
+  }
+  if (total <= 4) {
+    return {
+      label: 'Password strength: Moderate',
+      percentage,
+      barClass: 'bg-yellow-500',
+      textClass: 'text-yellow-600 dark:text-yellow-400',
+    };
+  }
+  return {
+    label: 'Password strength: Strong',
+    percentage,
+    barClass: 'bg-green-500',
+    textClass: 'text-green-600 dark:text-green-400',
+  };
+};
+
+const emailIsValid = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 
 export default function Register() {
   const [formData, setFormData] = useState({
@@ -15,6 +67,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordChecks, setPasswordChecks] = useState(() => evaluatePassword(''));
+  const [passwordStrength, setPasswordStrength] = useState(() => determineStrength(evaluatePassword('')));
   const { register } = useAuth();
   const navigate = useNavigate();
   const handleSubmit = async (e) => {
@@ -32,12 +86,15 @@ export default function Register() {
       setError('Full name is required.');
       return;
     }
-    if (!isValidEmail(email)) {
+    if (!emailIsValid(email)) {
       setError('Enter a valid email address.');
       return;
     }
-    if (!isStrongPassword(password)) {
-      setError(PASSWORD_REQUIREMENTS);
+    const latestPasswordChecks = evaluatePassword(password);
+    setPasswordChecks(latestPasswordChecks);
+    setPasswordStrength(determineStrength(latestPasswordChecks));
+    if (Object.values(latestPasswordChecks).some((flag) => !flag)) {
+      setError('Password must include at least 8 characters, plus uppercase, lowercase, number, and special character.');
       return;
     }
     if (!department) {
@@ -76,8 +133,20 @@ export default function Register() {
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === 'password') {
+      const nextChecks = evaluatePassword(value);
+      setPasswordChecks(nextChecks);
+      setPasswordStrength(determineStrength(nextChecks));
+    }
   };
+
+  const passwordMeetsAll = Object.values(passwordChecks).every(Boolean);
+  const passwordMissingSummaries = PASSWORD_RULES.filter((rule) => !passwordChecks[rule.key]).map((rule) => rule.summary);
+  const passwordEntered = formData.password.length > 0;
+  const showPasswordFeedback = passwordEntered;
+  const showPasswordHints = passwordEntered && !passwordMeetsAll;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 py-12 px-4 sm:px-6 lg:px-8 transition-colors">
@@ -145,6 +214,47 @@ export default function Register() {
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
+            {showPasswordFeedback && (
+              <div className="mt-3 space-y-2">
+                {!passwordMeetsAll && (
+                  <div className="h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden">
+                    <div
+                      className={`h-2 transition-all duration-300 ${passwordStrength.barClass}`}
+                      style={{ width: `${passwordStrength.percentage}%` }}
+                    />
+                  </div>
+                )}
+                {passwordEntered && !passwordMeetsAll && (
+                  <p className={`text-xs font-semibold ${passwordStrength.textClass}`}>
+                    {passwordStrength.label}
+                  </p>
+                )}
+                {showPasswordHints && (
+                  <>
+                    <ul className="space-y-1">
+                      {PASSWORD_RULES.map((rule) => {
+                        const satisfied = passwordChecks[rule.key];
+                        return (
+                          <li
+                            key={rule.key}
+                            className={`text-xs flex items-center gap-2 ${satisfied ? 'text-green-600 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}
+                          >
+                            <span
+                              className={`inline-flex h-2 w-2 rounded-full ${satisfied ? 'bg-green-500' : 'bg-red-500'}`}
+                              aria-hidden="true"
+                            />
+                            <span>{satisfied ? rule.present : rule.missing}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <p className="text-xs text-red-500 dark:text-red-400">
+                      Missing: {passwordMissingSummaries.join(', ')}.
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
             <select
               name="department"
               required
