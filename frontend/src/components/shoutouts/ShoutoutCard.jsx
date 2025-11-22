@@ -1,8 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
-import { commentAPI, reactionAPI, adminAPI } from '../../services/api';
+import { commentAPI, reactionAPI, adminAPI, shoutoutAPI } from '../../services/api';
 import CommentInput from './CommentInput';
 import Avatar from '../common/Avatar';
 import { extractMentionIds, parseMentions } from '../../utils/mentions';
+import { emitToast } from '../../utils/toast.js';
+import { useAuth } from '../../context/AuthContext';
 
 const REACTION_TYPES = [
   { type: 'like', label: 'Like', icon: '👍' },
@@ -22,6 +24,7 @@ const createInitialReportModalState = () => ({
 });
 
 export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefresh }) {
+  const { user } = useAuth();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
   const [commentText, setCommentText] = useState('');
@@ -30,9 +33,19 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   const [reactionMenuOpen, setReactionMenuOpen] = useState(false);
   const [reactionDetails, setReactionDetails] = useState({ open: false, loading: false, counts: {}, usersByType: {} });
   const [reportModal, setReportModal] = useState(() => createInitialReportModalState());
+  const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editMessage, setEditMessage] = useState(shoutout.message || '');
+  const [editError, setEditError] = useState('');
+  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   // no local loading state required for now
   const reactionMenuTimeoutRef = useRef(null);
   const commentFeedbackTimeoutRef = useRef(null);
+  const actionsMenuRef = useRef(null);
+  const isOwner = Boolean(user?.id) && (user?.id === shoutout.sender_id || user?.id === shoutout.sender?.id);
 
   useEffect(() => () => {
     if (reactionMenuTimeoutRef.current) {
@@ -42,6 +55,30 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
       clearTimeout(commentFeedbackTimeoutRef.current);
     }
   }, []);
+
+  useEffect(() => {
+    setEditMessage(shoutout.message || '');
+  }, [shoutout.message]);
+
+  useEffect(() => {
+    if (!actionsMenuOpen) return undefined;
+    const handleClickOutside = (event) => {
+      if (actionsMenuRef.current && !actionsMenuRef.current.contains(event.target)) {
+        setActionsMenuOpen(false);
+      }
+    };
+    const handleEscape = (event) => {
+      if (event.key === 'Escape') {
+        setActionsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [actionsMenuOpen]);
 
   const openReactionMenu = () => {
     if (reactionMenuTimeoutRef.current) {
@@ -162,6 +199,95 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
     }
   };
 
+  const openReportShoutoutModal = () => {
+    setActionsMenuOpen(false);
+    setReportModal({
+      ...createInitialReportModalState(),
+      open: true,
+      targetType: 'shoutout',
+      targetId: shoutout.id,
+      context: {
+        preview: shoutout.message,
+        author: shoutout.sender?.name,
+      },
+    });
+  };
+
+  const openEditModal = () => {
+    setEditMessage(shoutout.message || '');
+    setEditError('');
+    setEditModalOpen(true);
+    setActionsMenuOpen(false);
+  };
+
+  const closeEditModal = () => {
+    setEditModalOpen(false);
+    setEditError('');
+  };
+
+  const promptDeleteShoutout = () => {
+    if (!isOwner) {
+      return;
+    }
+    setActionsMenuOpen(false);
+    setDeleteError('');
+    setDeleteSubmitting(false);
+    setDeleteModalOpen(true);
+  };
+
+  const closeDeleteModal = () => {
+    setDeleteModalOpen(false);
+    setDeleteError('');
+    setDeleteSubmitting(false);
+  };
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault();
+    const trimmed = (editMessage || '').trim();
+    if (!trimmed) {
+      setEditError('Message cannot be empty.');
+      return;
+    }
+    if (trimmed === (shoutout.message || '').trim()) {
+      closeEditModal();
+      return;
+    }
+    setEditSubmitting(true);
+    setEditError('');
+    try {
+      await shoutoutAPI.update(shoutout.id, { message: trimmed }, { skipErrorToast: true });
+      emitToast('success', 'Shout-out updated.');
+      closeEditModal();
+      onRefresh?.();
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Failed to update shout-out.';
+      setEditError(detail);
+      emitToast('error', detail);
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
+
+  const handleDeleteShoutout = async () => {
+    if (!isOwner) {
+      return;
+    }
+    setDeleteSubmitting(true);
+    setDeleteError('');
+    try {
+      await shoutoutAPI.delete(shoutout.id, { skipErrorToast: true });
+      emitToast('success', 'Shout-out deleted.');
+      closeDeleteModal();
+      onRefresh?.();
+    } catch (error) {
+      const detail = error?.response?.data?.detail || error?.message || 'Failed to delete shout-out.';
+      emitToast('error', detail);
+      setDeleteError(detail);
+    } finally {
+      setDeleteSubmitting(false);
+    }
+  };
+
   const formatDate = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + ' at ' + date.toLocaleTimeString();
@@ -183,7 +309,7 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
           <Avatar src={shoutout.sender?.avatar_url} name={shoutout.sender?.name} />
         </div>
         <div className="flex-1">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between gap-2">
             <div>
               <p className="font-semibold text-gray-900 dark:text-gray-100">{shoutout.sender?.name || 'Unknown'}</p>
               {shoutout.sender?.department && (
@@ -191,8 +317,52 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
               )}
               <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(shoutout.created_at)}</p>
             </div>
+            {user && (
+              <div ref={actionsMenuRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setActionsMenuOpen((prev) => !prev)}
+                  className="p-2 rounded-full text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-haspopup="true"
+                  aria-expanded={actionsMenuOpen}
+                  aria-label="Shout-out actions"
+                >
+                  ⋮
+                </button>
+                {actionsMenuOpen && (
+                  <div className="absolute right-0 mt-2 w-44 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg z-20">
+                    {isOwner && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={openEditModal}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        >
+                          Edit shout-out
+                        </button>
+                        <button
+                          type="button"
+                          onClick={promptDeleteShoutout}
+                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                        >
+                          Delete shout-out
+                        </button>
+                        <div className="border-t border-gray-200 dark:border-gray-700" />
+                      </>
+                    )}
+                    <button
+                      type="button"
+                      onClick={openReportShoutoutModal}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      Report shout-out
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <p className="text-gray-800 dark:text-gray-100 mt-2">{shoutout.message}</p>
+          <p className="text-gray-800 dark:text-gray-100 mt-2 whitespace-pre-wrap break-words">{renderMentions(shoutout.message)}</p>
           {Array.isArray(shoutout.attachments) && shoutout.attachments.length > 0 && (
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {shoutout.attachments.map((att, idx) => (
@@ -261,24 +431,6 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
         >
           <span>💬</span>
           <span>{shoutout.comment_count ?? 0}</span>
-        </button>
-        <button
-          onClick={() =>
-            setReportModal({
-              ...createInitialReportModalState(),
-              open: true,
-              targetType: 'shoutout',
-              targetId: shoutout.id,
-              context: {
-                preview: shoutout.message,
-                author: shoutout.sender?.name,
-              },
-            })
-          }
-          className="ml-auto text-sm text-red-600 hover:text-red-700"
-          title="Report this shout-out"
-        >
-          Report
         </button>
       </div>
 
@@ -358,7 +510,7 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
                       Report
                     </button>
                   </div>
-                  <p className="text-gray-800 dark:text-gray-100">{renderMentions(comment.content)}</p>
+                  <p className="text-gray-800 dark:text-gray-100 whitespace-pre-wrap break-words">{renderMentions(comment.content)}</p>
                 </div>
               </div>
             ))}
@@ -381,6 +533,94 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
             errorMessage={commentError}
             successMessage={commentSuccess}
           />
+        </div>
+      )}
+
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-lg rounded-lg bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Shout-Out</h3>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close edit shout-out dialog"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <textarea
+                rows={5}
+                value={editMessage}
+                onChange={(event) => {
+                  setEditMessage(event.target.value);
+                  if (editError) {
+                    setEditError('');
+                  }
+                }}
+                className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Update your shout-out message"
+              />
+              {editError && <p className="text-sm text-red-600 dark:text-red-400">{editError}</p>}
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={closeEditModal}
+                  className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                >
+                  {editSubmitting ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deleteModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+          <div className="w-full max-w-md rounded-lg bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Delete Shout-Out</h3>
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                aria-label="Close delete shout-out dialog"
+              >
+                ✕
+              </button>
+            </div>
+            <p className="text-sm text-gray-700 dark:text-gray-200">
+              Are you sure you want to delete this shout-out? This action cannot be undone.
+            </p>
+            {deleteError && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{deleteError}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={closeDeleteModal}
+                className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteShoutout}
+                disabled={deleteSubmitting}
+                className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-60"
+              >
+                {deleteSubmitting ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -432,9 +672,23 @@ function renderMentions(text) {
   const mentions = parseMentions(text);
   let cursor = 0;
 
+  const pushSegments = (segments) => {
+    if (!segments) return;
+    if (Array.isArray(segments)) {
+      parts.push(...segments);
+    } else {
+      parts.push(segments);
+    }
+  };
+
+  if (!mentions.length) {
+    return renderTextWithLinks(text);
+  }
+
   mentions.forEach((mention, idx) => {
     if (mention.index > cursor) {
-      parts.push(text.slice(cursor, mention.index));
+      const slice = text.slice(cursor, mention.index);
+      pushSegments(renderTextWithLinks(slice, `pre-${idx}`));
     }
     parts.push(
       <span key={`m-${mention.index}-${idx}`} className="text-blue-600 font-medium">@{mention.display}</span>
@@ -443,10 +697,51 @@ function renderMentions(text) {
   });
 
   if (cursor < text.length) {
-    parts.push(text.slice(cursor));
+    pushSegments(renderTextWithLinks(text.slice(cursor), 'post'));
   }
 
   return parts;
+}
+
+function renderTextWithLinks(text, keyPrefix = 'text') {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/gi;
+  let lastIndex = 0;
+  let match;
+  const segments = [];
+  let counter = 0;
+
+  while ((match = urlRegex.exec(text)) !== null) {
+    const start = match.index;
+    if (start > lastIndex) {
+      segments.push(text.slice(lastIndex, start));
+    }
+    const url = match[0];
+    segments.push(
+      <a
+        key={`${keyPrefix}-url-${counter}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 underline break-words break-all inline-block max-w-full"
+        style={{ overflowWrap: 'anywhere', wordBreak: 'break-word' }}
+      >
+        {url}
+      </a>
+    );
+    counter += 1;
+    lastIndex = start + url.length;
+  }
+
+  if (lastIndex < text.length) {
+    segments.push(text.slice(lastIndex));
+  }
+
+  if (segments.length === 0) {
+    return text;
+  }
+
+  return segments;
 }
 
 function AttachmentPreview({ attachment }) {

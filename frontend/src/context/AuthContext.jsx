@@ -111,9 +111,26 @@ export const AuthProvider = ({ children }) => {
       emitToast('success', 'Registration complete. You can now sign in.');
       return response.data;
     } catch (error) {
-      const message = error?.response?.data?.detail || 'Registration failed. Please try again.';
+      const backendDetail = error?.response?.data?.detail || error?.response?.data?.message;
+      const conflictMessage = error?.response?.status === 409
+        ? 'Email already exists. Try signing in or use a different address.'
+        : null;
+      const message = backendDetail || conflictMessage || 'Registration failed. Please try again.';
       emitToast('error', message);
-      throw error;
+      const normalizedError = new Error(message);
+      if (error?.response) {
+        normalizedError.response = {
+          ...error.response,
+          data: {
+            ...error.response.data,
+            detail: message,
+            message,
+          },
+        };
+        normalizedError.status = error.response.status;
+      }
+      normalizedError.originalError = error;
+      throw normalizedError;
     }
   };
 

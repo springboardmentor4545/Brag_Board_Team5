@@ -68,7 +68,8 @@ export default function Register() {
         navigate('/');
       }
     } catch (err) {
-      setError(err.response?.data?.detail || 'Registration failed');
+      const detail = err?.response?.data?.detail || err?.message;
+      setError(detail || 'Registration failed');
     } finally {
       setLoading(false);
     }

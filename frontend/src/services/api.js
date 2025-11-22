@@ -111,8 +111,8 @@ export const shoutoutAPI = {
   },
   getAll: (params) => api.get('/shoutouts', { params }),
   getOne: (id, config = {}) => api.get(`/shoutouts/${id}`, config),
-  update: (id, data) => api.put(`/shoutouts/${id}`, data),
-  delete: (id) => api.delete(`/shoutouts/${id}`),
+  update: (id, data, config = {}) => api.put(`/shoutouts/${id}`, data, config),
+  delete: (id, config = {}) => api.delete(`/shoutouts/${id}`, config),
 };
 
 export const commentAPI = {
