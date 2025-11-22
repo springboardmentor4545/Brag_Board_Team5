@@ -142,6 +142,16 @@ export const adminAPI = {
   decideDepartmentChangeRequest: (requestId, action, config = {}) => api.post(`/admin/department-change-requests/${requestId}/decision`, { action }, config),
   getCommentReports: (status) => api.get('/admin/comment-reports', { params: status ? { status } : undefined }),
   resolveCommentReport: (reportId, action, config = {}) => api.post(`/admin/comment-reports/${reportId}/resolve`, { action }, config),
+  downloadAdminLogs: (params, config = {}) => api.get('/admin/exports/logs', {
+    ...config,
+    params,
+    responseType: 'blob',
+  }),
+  downloadReports: (params, config = {}) => api.get('/admin/exports/reports', {
+    ...config,
+    params,
+    responseType: 'blob',
+  }),
 };
 
 export const notificationsAPI = {

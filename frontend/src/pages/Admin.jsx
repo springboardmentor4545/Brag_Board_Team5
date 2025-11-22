@@ -33,6 +33,10 @@ export default function Admin() {
     cancelLabel: 'No',
     onConfirm: null,
   });
+  const [exportFormat, setExportFormat] = useState('csv');
+  const [exportStartDate, setExportStartDate] = useState('');
+  const [exportEndDate, setExportEndDate] = useState('');
+  const [exporting, setExporting] = useState(null);
 
   const fetchDepartmentRequests = async (statusOverride) => {
     const status = statusOverride ?? requestFilter;
@@ -246,6 +250,87 @@ export default function Admin() {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [confirmDialog.open, handleConfirmCancel]);
 
+  const getFilenameFromHeaders = (headers, fallback) => {
+    const disposition = headers?.['content-disposition'] || headers?.['Content-Disposition'];
+    if (!disposition) {
+      return fallback;
+    }
+    const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    if (!match) {
+      return fallback;
+    }
+    const encoded = match[1] || match[2];
+    if (!encoded) {
+      return fallback;
+    }
+    try {
+      return decodeURIComponent(encoded);
+    } catch (error) {
+      console.warn('Failed to decode filename from headers', error);
+      return encoded;
+    }
+  };
+
+  const triggerDownload = useCallback((blob, filename) => {
+    if (!blob) {
+      return;
+    }
+    const dataBlob = blob instanceof Blob ? blob : new Blob([blob]);
+    const url = window.URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }, []);
+
+  const handleExportDownload = useCallback(async (kind) => {
+    if (exportStartDate && exportEndDate && exportStartDate > exportEndDate) {
+      addToast('error', 'Start date cannot be after end date.');
+      return;
+    }
+
+    const baseParams = { format: exportFormat };
+    if (exportStartDate) {
+      baseParams.start_date = exportStartDate;
+    }
+    if (exportEndDate) {
+      baseParams.end_date = exportEndDate;
+    }
+
+    const requestConfig = { skipErrorToast: true };
+    let requestFn;
+    let fallbackPrefix;
+
+    if (kind === 'logs') {
+      requestFn = (params) => adminAPI.downloadAdminLogs(params, requestConfig);
+      fallbackPrefix = 'admin-logs';
+    } else if (kind === 'shoutoutReports') {
+      requestFn = (params) => adminAPI.downloadReports({ ...params, report_type: 'shoutout' }, requestConfig);
+      fallbackPrefix = 'shoutout-reports';
+    } else if (kind === 'commentReports') {
+      requestFn = (params) => adminAPI.downloadReports({ ...params, report_type: 'comment' }, requestConfig);
+      fallbackPrefix = 'comment-reports';
+    } else {
+      return;
+    }
+
+    setExporting(kind);
+    try {
+      const response = await requestFn(baseParams);
+      const filename = getFilenameFromHeaders(response?.headers, `${fallbackPrefix}.${exportFormat}`);
+      triggerDownload(response?.data, filename);
+      addToast('success', 'Download started.');
+    } catch (error) {
+      console.error('Failed to download export', error);
+      addToast('error', 'Failed to download export. Please try again.');
+    } finally {
+      setExporting(null);
+    }
+  }, [addToast, exportEndDate, exportFormat, exportStartDate, triggerDownload]);
+
   if (authLoading || loading) {
     return <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100">Loading...</div>;
   }
@@ -305,6 +390,71 @@ export default function Admin() {
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Department Stats</h2>
           <DepartmentStatsChart data={analytics?.department_stats} />
+        </div>
+
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">
+          <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Data Exports</h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Download admin logs and reported items as CSV or PDF. Apply an optional date range before exporting.</p>
+          <div className="flex flex-wrap items-end gap-4 mt-4">
+            <div className="flex flex-col">
+              <label htmlFor="export-start-date" className="text-sm text-gray-600 dark:text-gray-400 mb-1">Start date</label>
+              <input
+                id="export-start-date"
+                type="date"
+                value={exportStartDate}
+                onChange={(e) => setExportStartDate(e.target.value)}
+                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="export-end-date" className="text-sm text-gray-600 dark:text-gray-400 mb-1">End date</label>
+              <input
+                id="export-end-date"
+                type="date"
+                value={exportEndDate}
+                onChange={(e) => setExportEndDate(e.target.value)}
+                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+              />
+            </div>
+            <div className="flex flex-col">
+              <label htmlFor="export-format" className="text-sm text-gray-600 dark:text-gray-400 mb-1">Format</label>
+              <select
+                id="export-format"
+                value={exportFormat}
+                onChange={(e) => setExportFormat(e.target.value)}
+                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+              >
+                <option value="csv">CSV</option>
+                <option value="pdf">PDF</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => handleExportDownload('logs')}
+              disabled={exporting === 'logs'}
+              className={`px-4 py-2 rounded text-white text-sm ${exporting === 'logs' ? 'bg-blue-500/70 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              {exporting === 'logs' ? 'Preparing...' : 'Download Admin Logs'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportDownload('shoutoutReports')}
+              disabled={exporting === 'shoutoutReports'}
+              className={`px-4 py-2 rounded text-white text-sm ${exporting === 'shoutoutReports' ? 'bg-indigo-500/70 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+            >
+              {exporting === 'shoutoutReports' ? 'Preparing...' : 'Download Shout-out Reports'}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportDownload('commentReports')}
+              disabled={exporting === 'commentReports'}
+              className={`px-4 py-2 rounded text-white text-sm ${exporting === 'commentReports' ? 'bg-purple-500/70 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+            >
+              {exporting === 'commentReports' ? 'Preparing...' : 'Download Comment Reports'}
+            </button>
+          </div>
         </div>
 
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">

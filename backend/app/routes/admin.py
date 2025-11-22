@@ -1,8 +1,12 @@
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func
 from typing import List, Optional
+from fastapi.responses import Response
+from io import BytesIO, StringIO
+import csv
 from app.database import get_db
 from app.models.user import User
 from app.models.shoutout import ShoutOut, ShoutOutRecipient
@@ -24,6 +28,90 @@ from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
+DATE_PARAM_FORMAT = "%Y-%m-%d"
+DISPLAY_TZ = ZoneInfo("Asia/Kolkata")
+DISPLAY_TZ_LABEL = "IST"
+
+
+def _parse_date_param(value: Optional[str], param_name: str, *, end_of_day: bool = False) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        parsed = datetime.strptime(value, DATE_PARAM_FORMAT)
+    except ValueError as exc:  # pragma: no cover - defensive branch
+        raise HTTPException(status_code=400, detail=f"Invalid {param_name}. Expected format YYYY-MM-DD.") from exc
+
+    if end_of_day:
+        parsed = parsed + timedelta(days=1) - timedelta(microseconds=1)
+
+    return parsed.replace(tzinfo=timezone.utc)
+
+
+def _format_timestamp(value: Optional[datetime]) -> str:
+    if not value:
+        return ""
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    localized = value.astimezone(DISPLAY_TZ)
+    return localized.strftime(f"%Y-%m-%d %H:%M:%S {DISPLAY_TZ_LABEL}")
+
+
+def _make_filename(prefix: str, extension: str, start: Optional[str], end: Optional[str]) -> str:
+    if start and end:
+        suffix = f"{start}-to-{end}"
+    elif start:
+        suffix = f"from-{start}"
+    elif end:
+        suffix = f"until-{end}"
+    else:
+        suffix = "all"
+    safe_suffix = suffix.replace("/", "-").replace(" ", "_")
+    return f"{prefix}-{safe_suffix}.{extension}"
+
+
+def _build_csv_response(filename: str, headers_row: List[str], rows: List[List[str]]) -> Response:
+    buffer = StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(headers_row)
+    for row in rows:
+        writer.writerow(row)
+    content = buffer.getvalue()
+    buffer.close()
+    return Response(
+        content=content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+def _build_pdf_response(filename: str, lines: List[str]) -> Response:
+    from reportlab.lib.pagesizes import letter  # imported lazily to avoid unnecessary dependency at import time
+    from reportlab.pdfgen import canvas
+
+    buffer = BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+    text_object = pdf.beginText(40, height - 40)
+    text_object.setLeading(14)
+
+    for line in lines:
+        if text_object.getY() <= 40:
+            pdf.drawText(text_object)
+            pdf.showPage()
+            text_object = pdf.beginText(40, height - 40)
+            text_object.setLeading(14)
+        text_object.textLine(line)
+
+    pdf.drawText(text_object)
+    pdf.save()
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
 @router.get("/users", response_model=List[UserSchema])
 async def get_all_users(
     admin: User = Depends(require_admin),
@@ -31,6 +119,265 @@ async def get_all_users(
 ):
     users = db.query(User).all()
     return users
+
+
+@router.get("/exports/logs")
+async def export_admin_logs(
+    export_format: str = Query("csv", alias="format"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized_format = (export_format or "csv").lower()
+    if normalized_format not in {"csv", "pdf"}:
+        raise HTTPException(status_code=400, detail="format must be either 'csv' or 'pdf'")
+
+    start_dt = _parse_date_param(start_date, "start_date")
+    end_dt = _parse_date_param(end_date, "end_date", end_of_day=True)
+
+    if start_dt and end_dt and start_dt > end_dt:
+        raise HTTPException(status_code=400, detail="start_date must be earlier than end_date")
+
+    query = (
+        db.query(AdminLog, User.name.label("admin_name"), User.email.label("admin_email"))
+        .join(User, User.id == AdminLog.admin_id)
+    )
+
+    if start_dt:
+        query = query.filter(AdminLog.timestamp >= start_dt)
+    if end_dt:
+        query = query.filter(AdminLog.timestamp <= end_dt)
+
+    records = query.order_by(AdminLog.timestamp.desc(), AdminLog.id.desc()).all()
+
+    export_entries = []
+    for log, admin_name, admin_email in records:
+        export_entries.append({
+            "id": log.id,
+            "timestamp": _format_timestamp(log.timestamp),
+            "admin_name": admin_name or "",
+            "admin_email": admin_email or "",
+            "action": (log.action or "").strip(),
+            "target_type": log.target_type or "",
+            "target_id": "" if log.target_id is None else str(log.target_id),
+        })
+
+    filename = _make_filename("admin-logs", normalized_format, start_date, end_date)
+
+    if normalized_format == "csv":
+        headers_row = [
+            "Log ID",
+            f"Timestamp ({DISPLAY_TZ_LABEL})",
+            "Admin Name",
+            "Admin Email",
+            "Action",
+            "Target Type",
+            "Target ID",
+        ]
+        data_rows = [
+            [
+                str(entry["id"]),
+                entry["timestamp"],
+                entry["admin_name"],
+                entry["admin_email"],
+                entry["action"],
+                entry["target_type"],
+                entry["target_id"],
+            ]
+            for entry in export_entries
+        ]
+        return _build_csv_response(filename, headers_row, data_rows)
+    else:
+        summary_lines = [
+            "Admin Logs Export",
+            f"Generated at {_format_timestamp(datetime.now(timezone.utc))}",
+            f"Timezone: {DISPLAY_TZ_LABEL}",
+        ]
+        if start_date or end_date:
+            range_fragments = []
+            if start_date:
+                range_fragments.append(f"from {start_date}")
+            if end_date:
+                range_fragments.append(f"to {end_date}")
+            summary_lines.append(f"Filtered {' '.join(range_fragments)}")
+        else:
+            summary_lines.append("Filtered all dates")
+
+        if not export_entries:
+            summary_lines.append("")
+            summary_lines.append("No admin log entries found for the selected range.")
+        else:
+            summary_lines.append("")
+            for entry in export_entries:
+                summary_lines.append(
+                    f"#{entry['id']} | {entry['timestamp']} | {entry['admin_name'] or 'Unknown admin'}"
+                )
+                if entry["admin_email"]:
+                    summary_lines.append(f"  Email: {entry['admin_email']}")
+                summary_lines.append(f"  Action: {entry['action'].replace('\n', ' ')}")
+                if entry["target_type"] or entry["target_id"]:
+                    target_label = entry["target_type"] or "Target"
+                    identifier = entry["target_id"] or "--"
+                    summary_lines.append(f"  Target: {target_label} #{identifier}")
+                summary_lines.append("")
+
+        return _build_pdf_response(filename, summary_lines)
+
+
+@router.get("/exports/reports")
+async def export_reports(
+    report_type: str = Query("shoutout"),
+    export_format: str = Query("csv", alias="format"),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    normalized_format = (export_format or "csv").lower()
+    if normalized_format not in {"csv", "pdf"}:
+        raise HTTPException(status_code=400, detail="format must be either 'csv' or 'pdf'")
+
+    normalized_type = (report_type or "shoutout").lower()
+    if normalized_type not in {"shoutout", "comment"}:
+        raise HTTPException(status_code=400, detail="report_type must be 'shoutout' or 'comment'")
+
+    start_dt = _parse_date_param(start_date, "start_date")
+    end_dt = _parse_date_param(end_date, "end_date", end_of_day=True)
+
+    if start_dt and end_dt and start_dt > end_dt:
+        raise HTTPException(status_code=400, detail="start_date must be earlier than end_date")
+
+    if normalized_type == "shoutout":
+        query = (
+            db.query(Report, User.name.label("reporter_name"), User.email.label("reporter_email"))
+            .join(User, User.id == Report.reported_by)
+        )
+        if start_dt:
+            query = query.filter(Report.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(Report.created_at <= end_dt)
+        records = query.order_by(Report.created_at.desc(), Report.id.desc()).all()
+
+        export_entries = []
+        for report, reporter_name, reporter_email in records:
+            export_entries.append({
+                "id": report.id,
+                "timestamp": _format_timestamp(report.created_at),
+                "reporter_name": reporter_name or "",
+                "reporter_email": reporter_email or "",
+                "shoutout_id": str(report.shoutout_id),
+                "status": report.status,
+                "reason": (report.reason or "").strip(),
+            })
+
+        filename = _make_filename("shoutout-reports", normalized_format, start_date, end_date)
+        csv_headers = [
+            "Report ID",
+            f"Timestamp ({DISPLAY_TZ_LABEL})",
+            "Reporter",
+            "Reporter Email",
+            "Shout-out ID",
+            "Status",
+            "Reason",
+        ]
+    else:
+        query = (
+            db.query(CommentReportModel, User.name.label("reporter_name"), User.email.label("reporter_email"))
+            .join(User, User.id == CommentReportModel.reported_by)
+        )
+        if start_dt:
+            query = query.filter(CommentReportModel.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(CommentReportModel.created_at <= end_dt)
+        records = query.order_by(CommentReportModel.created_at.desc(), CommentReportModel.id.desc()).all()
+
+        export_entries = []
+        for report, reporter_name, reporter_email in records:
+            export_entries.append({
+                "id": report.id,
+                "timestamp": _format_timestamp(report.created_at),
+                "reporter_name": reporter_name or "",
+                "reporter_email": reporter_email or "",
+                "comment_id": str(report.comment_id),
+                "shoutout_id": str(report.shoutout_id),
+                "status": report.status,
+                "reason": (report.reason or "").strip(),
+            })
+
+        filename = _make_filename("comment-reports", normalized_format, start_date, end_date)
+        csv_headers = [
+            "Report ID",
+            f"Timestamp ({DISPLAY_TZ_LABEL})",
+            "Reporter",
+            "Reporter Email",
+            "Comment ID",
+            "Shout-out ID",
+            "Status",
+            "Reason",
+        ]
+
+    if normalized_format == "csv":
+        data_rows = []
+        for entry in export_entries:
+            row = [
+                str(entry["id"]),
+                entry["timestamp"],
+                entry["reporter_name"],
+                entry["reporter_email"],
+            ]
+            if normalized_type == "comment":
+                row.extend([
+                    entry.get("comment_id", ""),
+                    entry.get("shoutout_id", ""),
+                ])
+            else:
+                row.append(entry.get("shoutout_id", ""))
+            row.extend([
+                entry["status"],
+                entry["reason"],
+            ])
+            data_rows.append(row)
+        return _build_csv_response(filename, csv_headers, data_rows)
+
+    summary_lines = [
+        "Reported Items Export",
+        f"Type: {'Comment Reports' if normalized_type == 'comment' else 'Shout-out Reports'}",
+        f"Generated at {_format_timestamp(datetime.now(timezone.utc))}",
+        f"Timezone: {DISPLAY_TZ_LABEL}",
+    ]
+    if start_date or end_date:
+        range_fragments = []
+        if start_date:
+            range_fragments.append(f"from {start_date}")
+        if end_date:
+            range_fragments.append(f"to {end_date}")
+        summary_lines.append(f"Filtered {' '.join(range_fragments)}")
+    else:
+        summary_lines.append("Filtered all dates")
+
+    if not export_entries:
+        summary_lines.append("")
+        summary_lines.append("No reports found for the selected filters.")
+    else:
+        summary_lines.append("")
+        for entry in export_entries:
+            summary_lines.append(
+                f"#{entry['id']} | {entry['timestamp']} | {entry['reporter_name'] or 'Unknown reporter'} | Status: {entry['status']}"
+            )
+            if entry.get("reporter_email"):
+                summary_lines.append(f"  Email: {entry['reporter_email']}")
+            if normalized_type == "comment":
+                summary_lines.append(
+                    f"  Related: Comment #{entry.get('comment_id', '--')} on Shout-out #{entry.get('shoutout_id', '--')}"
+                )
+            else:
+                summary_lines.append(f"  Related: Shout-out #{entry.get('shoutout_id', '--')}")
+            if entry.get("reason"):
+                summary_lines.append(f"  Reason: {entry['reason'].replace('\n', ' ')}")
+            summary_lines.append("")
+
+    return _build_pdf_response(filename, summary_lines)
 
 @router.get("/analytics")
 async def get_analytics(
