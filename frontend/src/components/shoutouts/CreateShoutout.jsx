@@ -171,8 +171,8 @@ export default function CreateShoutout({ onClose, onCreate }) {
             />
           </div>
 
-          <div className="mb-6 grid gap-6 md:grid-cols-2">
-            <div>
+          <div className="mb-6 grid gap-6 md:grid-cols-3">
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Tag Teammates (optional){selectedRecipients.length > 0 ? ` — ${selectedRecipients.length} selected` : ''}
               </label>
@@ -198,7 +198,7 @@ export default function CreateShoutout({ onClose, onCreate }) {
                   </div>
                 )}
 
-                <div className="relative max-w-md">
+                <div className="relative">
                   <span
                     className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-gray-400 dark:text-gray-500"
                     aria-hidden="true"
@@ -215,7 +215,7 @@ export default function CreateShoutout({ onClose, onCreate }) {
                   />
 
                   {shouldShowRecipientSuggestions && (
-                    <div className="absolute mt-2 w-full max-w-md max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md shadow-lg bg-white dark:bg-gray-900 z-20">
+                    <div className="absolute mt-2 w-full max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700 rounded-md shadow-lg bg-white dark:bg-gray-900 z-20">
                       {recipientLoading ? (
                         <p className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">Searching…</p>
                       ) : recipientSuggestions.length > 0 ? (
@@ -244,7 +244,7 @@ export default function CreateShoutout({ onClose, onCreate }) {
               </div>
             </div>
 
-            <div>
+            <div className="md:col-span-1">
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Attachments (optional)
               </label>
@@ -269,13 +269,13 @@ export default function CreateShoutout({ onClose, onCreate }) {
                   />
                 </div>
                 {files.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {files.map((f, idx) => (
                       <div key={idx} className="relative border rounded p-2 bg-gray-50 dark:bg-gray-800">
                         {f.type.startsWith('image/') ? (
-                          <img src={URL.createObjectURL(f)} alt={f.name} className="w-full h-24 object-cover rounded" />
+                          <img src={URL.createObjectURL(f)} alt={f.name} className="w-full h-20 object-cover rounded" />
                         ) : (
-                          <div className="h-24 flex items-center justify-center text-sm text-gray-600 dark:text-gray-300">PDF: {f.name}</div>
+                          <div className="h-20 flex items-center justify-center text-sm text-gray-600 dark:text-gray-300">PDF: {f.name}</div>
                         )}
                         <button type="button" onClick={() => removeFile(idx)} className="absolute top-1 right-1 text-xs bg-red-500 text-white rounded px-1">✕</button>
                       </div>
