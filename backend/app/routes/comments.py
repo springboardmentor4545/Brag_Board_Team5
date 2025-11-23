@@ -113,7 +113,7 @@ async def create_comment(
             payload={
                 "shoutout_id": shoutout_id,
                 "comment_id": new_comment.id,
-                "redirect_url": "/feed",
+                "redirect_url": f"/feed?shoutout={shoutout_id}&comment={new_comment.id}",
             },
         )
 
@@ -137,7 +137,7 @@ async def create_comment(
             payload={
                 "shoutout_id": shoutout_id,
                 "comment_id": new_comment.id,
-                "redirect_url": "/feed",
+                "redirect_url": f"/feed?shoutout={shoutout_id}&comment={new_comment.id}",
             },
         )
         notified_recipient_ids.add(rid)
@@ -158,7 +158,7 @@ async def create_comment(
             payload={
                 "shoutout_id": shoutout_id,
                 "comment_id": new_comment.id,
-                "redirect_url": "/feed",
+                "redirect_url": f"/feed?shoutout={shoutout_id}&comment={new_comment.id}",
             },
         )
 

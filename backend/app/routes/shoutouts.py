@@ -189,7 +189,7 @@ async def create_shoutout(
             reference_id=new_shoutout.id,
             payload={
                 "shoutout_id": new_shoutout.id,
-                "redirect_url": "/feed",
+                "redirect_url": f"/feed?shoutout={new_shoutout.id}",
             },
         )
 

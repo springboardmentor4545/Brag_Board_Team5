@@ -72,7 +72,7 @@ async def add_reaction(
             reference_id=shoutout_id,
             payload={
                 "shoutout_id": shoutout_id,
-                "redirect_url": "/feed",
+                "redirect_url": f"/feed?shoutout={shoutout_id}",
             },
         )
 

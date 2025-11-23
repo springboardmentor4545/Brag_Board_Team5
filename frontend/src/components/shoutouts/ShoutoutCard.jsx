@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { commentAPI, reactionAPI, adminAPI, shoutoutAPI, userAPI } from '../../services/api';
 import CommentInput from './CommentInput';
 import Avatar from '../common/Avatar';
@@ -23,7 +23,15 @@ const createInitialReportModalState = () => ({
   error: '',
 });
 
-export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefresh }) {
+export default function ShoutoutCard({
+  shoutout,
+  onReaction,
+  onComment,
+  onRefresh,
+  isHighlighted = false,
+  focusCommentId = null,
+  onFocusHandled,
+}) {
   const { user } = useAuth();
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -45,11 +53,13 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   const [commentEditState, setCommentEditState] = useState({ commentId: null, value: '', submitting: false, error: '' });
   const [commentDeleteState, setCommentDeleteState] = useState({ open: false, commentId: null, submitting: false, error: '' });
   const [commentEditMention, setCommentEditMention] = useState({ query: '', suggestions: [], activeIndex: 0, show: false });
+  const [highlightedCommentId, setHighlightedCommentId] = useState(null);
   // no local loading state required for now
   const reactionMenuTimeoutRef = useRef(null);
   const commentFeedbackTimeoutRef = useRef(null);
   const actionsMenuRef = useRef(null);
   const commentEditTextareaRef = useRef(null);
+  const commentContainerRef = useRef(null);
   const isOwner = Boolean(user?.id) && (user?.id === shoutout.sender_id || user?.id === shoutout.sender?.id);
 
   useEffect(() => () => {
@@ -164,19 +174,93 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
     }, 200);
   };
 
-  const loadComments = async () => {
-    if (showComments) {
+  const highlightComment = useCallback((commentId) => {
+    if (!commentId) {
+      return;
+    }
+    setHighlightedCommentId(commentId);
+    const scrollToComment = () => {
+      const container = commentContainerRef.current;
+      const target = container?.querySelector(`[data-comment-id="${commentId}"]`);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(scrollToComment);
+    } else {
+      scrollToComment();
+    }
+  }, []);
+
+  const loadComments = useCallback(async (options = {}) => {
+    const config = options || {};
+    const forceShow = Boolean(config.forceShow);
+    const focusId = config.focusCommentId ?? null;
+
+    if (showComments && !forceShow) {
+      if (highlightedCommentId) {
+        setHighlightedCommentId(null);
+      }
       setShowComments(false);
       return;
     }
+
+    if (showComments && forceShow && comments.length > 0) {
+      if (focusId) {
+        highlightComment(focusId);
+      }
+      return;
+    }
+
     try {
       const response = await commentAPI.getAll(shoutout.id);
       setComments(response.data);
       setShowComments(true);
+      if (focusId) {
+        setTimeout(() => {
+          highlightComment(focusId);
+        }, 60);
+      }
     } catch (error) {
       console.error('Error loading comments:', error);
     }
-  };
+  }, [showComments, comments.length, highlightComment, highlightedCommentId, shoutout.id]);
+
+  useEffect(() => {
+    if (!focusCommentId) {
+      return undefined;
+    }
+    let cancelled = false;
+
+    const openAndFocus = async () => {
+      try {
+        await loadComments({ forceShow: true, focusCommentId });
+      } finally {
+        if (!cancelled) {
+          onFocusHandled?.();
+        }
+      }
+    };
+
+    openAndFocus();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [focusCommentId, loadComments, onFocusHandled]);
+
+  useEffect(() => {
+    if (!highlightedCommentId) {
+      return undefined;
+    }
+    const timer = setTimeout(() => {
+      setHighlightedCommentId(null);
+    }, 6000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [highlightedCommentId]);
 
   const handleAddComment = async (e) => {
     e.preventDefault();
@@ -594,7 +678,12 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   }
 
   return (
-  <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow p-4 sm:p-6 card">
+    <div
+      data-shoutout-id={shoutout.id}
+      className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow p-4 sm:p-6 card transition-shadow ${
+        isHighlighted ? 'ring-2 ring-blue-400 dark:ring-blue-500 shadow-lg' : ''
+      }`}
+    >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:space-x-3 mb-4">
         <div className="flex-shrink-0">
           <Avatar src={shoutout.sender?.avatar_url} name={shoutout.sender?.name} />
@@ -773,7 +862,7 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
 
       {showComments && (
         <div className="mt-4 border-t border-gray-200 dark:border-gray-800 pt-4">
-          <div className="space-y-3 mb-4">
+          <div className="space-y-3 mb-4" ref={commentContainerRef}>
             {comments.map((comment) => {
               const ownerId = comment?.user?.id ?? comment?.user_id;
               const isCommentOwner = Boolean(user?.id) && ownerId === user.id;
@@ -788,12 +877,17 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
                   editedLabel = formatDate(comment.updated_at);
                 }
               }
+              const isHighlightedComment = highlightedCommentId === comment.id;
               return (
-                <div key={comment.id} className="flex space-x-2">
+                <div key={comment.id} data-comment-id={comment.id} className="flex space-x-2">
                   <div className="flex-shrink-0">
                     <Avatar src={comment.user?.avatar_url} name={comment.user?.name} size="sm" />
                   </div>
-                  <div className="flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
+                  <div
+                    className={`flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 transition-shadow ${
+                      isHighlightedComment ? 'ring-2 ring-blue-400 dark:ring-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg' : ''
+                    }`}
+                  >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="font-semibold text-sm text-gray-900 dark:text-gray-100">{comment.user?.name || 'Unknown'}</p>

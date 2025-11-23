@@ -1,8 +1,36 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { shoutoutAPI, commentAPI, reactionAPI, userAPI } from '../services/api';
 import CreateShoutout from '../components/shoutouts/CreateShoutout';
 import ShoutoutCard from '../components/shoutouts/ShoutoutCard';
 import ErrorBoundary from '../components/common/ErrorBoundary';
+
+const parseFocusParams = (params) => {
+  if (!params) {
+    return null;
+  }
+
+  const shoutoutParam = params.get('shoutout');
+  if (!shoutoutParam) {
+    return null;
+  }
+
+  const shoutoutId = Number.parseInt(shoutoutParam, 10);
+  if (Number.isNaN(shoutoutId) || shoutoutId <= 0) {
+    return null;
+  }
+
+  const commentParam = params.get('comment');
+  let commentId = null;
+  if (commentParam) {
+    const parsedComment = Number.parseInt(commentParam, 10);
+    if (!Number.isNaN(parsedComment) && parsedComment > 0) {
+      commentId = parsedComment;
+    }
+  }
+
+  return { shoutoutId, commentId };
+};
 
 const DEPARTMENT_OPTIONS = ['Sales', 'Marketing', 'Engineering', 'HR', 'Finance', 'Operations'].sort((a, b) => a.localeCompare(b));
 
@@ -17,6 +45,86 @@ export default function Feed() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [feedback, setFeedback] = useState({ type: '', message: '' });
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [pendingFocus, setPendingFocus] = useState(() => parseFocusParams(searchParams));
+  const [highlightedShoutoutId, setHighlightedShoutoutId] = useState(null);
+  const focusAppliedRef = useRef(null);
+
+  const handleFocusHandled = useCallback(() => {
+    setPendingFocus(null);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('shoutout');
+    nextParams.delete('comment');
+    if (Array.from(nextParams.keys()).length === 0) {
+      setSearchParams({}, { replace: true });
+    } else {
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const parsed = parseFocusParams(searchParams);
+    setPendingFocus((prev) => {
+      if (!parsed && !prev) {
+        return prev;
+      }
+      if (parsed && prev && parsed.shoutoutId === prev.shoutoutId && parsed.commentId === prev.commentId) {
+        return prev;
+      }
+      return parsed;
+    });
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!pendingFocus) {
+      focusAppliedRef.current = null;
+    }
+  }, [pendingFocus]);
+
+  useEffect(() => {
+    if (!pendingFocus?.shoutoutId) {
+      return;
+    }
+
+    const targetExists = shoutouts.some((item) => item.id === pendingFocus.shoutoutId);
+    if (!targetExists) {
+      return;
+    }
+
+    if (focusAppliedRef.current === pendingFocus.shoutoutId && pendingFocus.commentId) {
+      return;
+    }
+
+    focusAppliedRef.current = pendingFocus.shoutoutId;
+    setHighlightedShoutoutId(pendingFocus.shoutoutId);
+
+    const scrollToCard = () => {
+      const element = document?.querySelector?.(`[data-shoutout-id="${pendingFocus.shoutoutId}"]`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(scrollToCard);
+    } else {
+      scrollToCard();
+    }
+
+    if (!pendingFocus.commentId) {
+      handleFocusHandled();
+    }
+  }, [pendingFocus, shoutouts, handleFocusHandled]);
+
+  useEffect(() => {
+    if (!highlightedShoutoutId) {
+      return undefined;
+    }
+    const timer = setTimeout(() => setHighlightedShoutoutId(null), 6000);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [highlightedShoutoutId]);
 
   const fetchShoutouts = useCallback(async (options = {}) => {
     const opts = (options && typeof options === 'object' && !('nativeEvent' in options)) ? options : {};
@@ -293,6 +401,9 @@ export default function Feed() {
                   onReaction={handleReaction}
                   onComment={handleComment}
                   onRefresh={fetchShoutouts}
+                  isHighlighted={highlightedShoutoutId === shoutout.id}
+                  focusCommentId={pendingFocus?.shoutoutId === shoutout.id ? pendingFocus.commentId : null}
+                  onFocusHandled={handleFocusHandled}
                 />
               ))}
             </ErrorBoundary>
