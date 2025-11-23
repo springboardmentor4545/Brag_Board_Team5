@@ -194,11 +194,12 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
     const mentions = extractMentionIds(commentText);
 
     try {
-      await onComment(shoutout.id, { content: commentText, mentions });
+      const createdComment = await onComment(shoutout.id, { content: commentText, mentions });
       setCommentText('');
-      // We need to reload the comments after adding a new one.
-      // We can do this by calling onRefresh, which will refetch the shoutouts.
-      onRefresh();
+      if (showComments && createdComment) {
+        setComments((prev) => [...prev, createdComment]);
+      }
+      onRefresh?.({ silent: true });
       setCommentSuccess('Comment posted successfully.');
       commentFeedbackTimeoutRef.current = setTimeout(() => setCommentSuccess(''), 3000);
     } catch (error) {
@@ -209,8 +210,60 @@ export default function ShoutoutCard({ shoutout, onReaction, onComment, onRefres
   };
 
   const handleReactionClick = (type) => {
-    const isAdding = !(shoutout.user_reactions || []).includes(type);
-    onReaction(shoutout.id, type, isAdding);
+    const currentReactions = Array.isArray(shoutout.user_reactions) ? [...shoutout.user_reactions] : [];
+    const isAdding = !currentReactions.includes(type);
+    const replacedTypes = isAdding ? currentReactions.filter((reaction) => reaction !== type) : [];
+
+    onReaction(shoutout.id, type, isAdding, replacedTypes);
+
+    if (reactionDetails.open && !reactionDetails.loading && user) {
+      setReactionDetails((prev) => {
+        if (!prev.open) {
+          return prev;
+        }
+
+        const nextCounts = { ...(prev.counts || {}) };
+        const nextUsersByType = { ...(prev.usersByType || {}) };
+
+        const removeUserFromType = (reactionType) => {
+          if (typeof nextCounts[reactionType] === 'number') {
+            nextCounts[reactionType] = Math.max(nextCounts[reactionType] - 1, 0);
+          }
+          if (Array.isArray(nextUsersByType[reactionType])) {
+            nextUsersByType[reactionType] = nextUsersByType[reactionType].filter((entry) => entry?.id !== user.id);
+          }
+        };
+
+        const addUserToType = (reactionType) => {
+          nextCounts[reactionType] = (nextCounts[reactionType] || 0) + 1;
+          const existing = Array.isArray(nextUsersByType[reactionType])
+            ? [...nextUsersByType[reactionType]]
+            : [];
+          if (!existing.some((entry) => entry?.id === user.id)) {
+            existing.push({
+              id: user.id,
+              name: user.name,
+              email: user.email,
+              avatar_url: user.avatar_url,
+            });
+          }
+          nextUsersByType[reactionType] = existing;
+        };
+
+        if (isAdding) {
+          replacedTypes.forEach(removeUserFromType);
+          addUserToType(type);
+        } else {
+          removeUserFromType(type);
+        }
+
+        return {
+          ...prev,
+          counts: nextCounts,
+          usersByType: nextUsersByType,
+        };
+      });
+    }
     setReactionMenuOpen(false);
   };
 

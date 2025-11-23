@@ -18,8 +18,13 @@ export default function Feed() {
   const [endDate, setEndDate] = useState('');
   const [feedback, setFeedback] = useState({ type: '', message: '' });
 
-  const fetchShoutouts = useCallback(async () => {
-    setLoading(true);
+  const fetchShoutouts = useCallback(async (options = {}) => {
+    const opts = (options && typeof options === 'object' && !('nativeEvent' in options)) ? options : {};
+    const { silent = false } = opts;
+
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const params = { all_departments: true }; // Fetch from all departments
       if (filterDept) params.department = filterDept;
@@ -31,7 +36,9 @@ export default function Feed() {
     } catch (error) {
       console.error('Error fetching shoutouts:', error);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [filterDept, filterSender, startDate, endDate]);
 
@@ -81,24 +88,73 @@ export default function Feed() {
     }
   };
 
-  const handleReaction = async (shoutoutId, reactionType, isAdding) => {
+  const handleReaction = async (shoutoutId, reactionType, isAdding, replacedTypes = []) => {
+    const previousState = shoutouts.map((item) => ({
+      ...item,
+      reaction_counts: item.reaction_counts ? { ...item.reaction_counts } : undefined,
+      user_reactions: Array.isArray(item.user_reactions) ? [...item.user_reactions] : undefined,
+    }));
+    const replacements = Array.isArray(replacedTypes)
+      ? [...new Set(replacedTypes.filter((value) => value && value !== reactionType))]
+      : [];
+
+    setShoutouts((current) => current.map((item) => {
+      if (item.id !== shoutoutId) {
+        return item;
+      }
+
+      const currentCounts = { ...(item.reaction_counts || {}) };
+      const currentUserReactions = new Set(item.user_reactions || []);
+
+      if (isAdding) {
+        replacements.forEach((oldType) => {
+          if (currentUserReactions.delete(oldType)) {
+            currentCounts[oldType] = Math.max((currentCounts[oldType] || 1) - 1, 0);
+          }
+        });
+        currentUserReactions.add(reactionType);
+        currentCounts[reactionType] = (currentCounts[reactionType] || 0) + 1;
+      } else {
+        currentUserReactions.delete(reactionType);
+        currentCounts[reactionType] = Math.max((currentCounts[reactionType] || 1) - 1, 0);
+      }
+
+      return {
+        ...item,
+        reaction_counts: currentCounts,
+        user_reactions: Array.from(currentUserReactions),
+      };
+    }));
+
     try {
       if (isAdding) {
+        for (const oldType of replacements) {
+          await reactionAPI.remove(shoutoutId, oldType);
+        }
         await reactionAPI.add(shoutoutId, reactionType);
       } else {
         await reactionAPI.remove(shoutoutId, reactionType);
       }
-      fetchShoutouts();
+      fetchShoutouts({ silent: true });
     } catch (error) {
       console.error('Error handling reaction:', error);
+      setShoutouts(previousState);
+      setFeedback({ type: 'error', message: 'Unable to update reaction. Please try again.' });
     }
   };
 
   // Align signature with ShoutoutCard: second arg is a payload { content, mentions }
   const handleComment = async (shoutoutId, payload) => {
     try {
-      await commentAPI.create(shoutoutId, payload);
-      fetchShoutouts();
+      const response = await commentAPI.create(shoutoutId, payload);
+      const createdComment = response?.data;
+      setShoutouts((current) => current.map((item) => (
+        item.id === shoutoutId
+          ? { ...item, comment_count: (item.comment_count ?? 0) + 1 }
+          : item
+      )));
+      fetchShoutouts({ silent: true });
+      return createdComment;
     } catch (error) {
       console.error('Error adding comment:', error);
       throw error;
