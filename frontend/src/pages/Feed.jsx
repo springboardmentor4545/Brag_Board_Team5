@@ -32,7 +32,7 @@ const parseFocusParams = (params) => {
   return { shoutoutId, commentId };
 };
 
-const DEPARTMENT_OPTIONS = ['Sales', 'Marketing', 'Engineering', 'HR', 'Finance', 'Operations'].sort((a, b) => a.localeCompare(b));
+const DEPARTMENT_OPTIONS = ['HR', 'Finance', 'Marketing', 'Product Development', 'Quality Assurance', 'Security'];
 
 export default function Feed() {
   const [shoutouts, setShoutouts] = useState([]);
