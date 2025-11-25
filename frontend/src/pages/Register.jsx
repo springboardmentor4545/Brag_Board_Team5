@@ -80,7 +80,9 @@ export default function Register() {
     const email = formData.email.trim();
     const password = formData.password.trim();
     const department = formData.department.trim();
-    const role = (formData.role || '').trim();
+    const role = department === 'HR'
+      ? ((formData.role || '').trim() || 'employee')
+      : 'employee';
 
     if (!name) {
       setError('Full name is required.');
@@ -101,7 +103,7 @@ export default function Register() {
       setError('Please select a department.');
       return;
     }
-    if (!role) {
+    if (department === 'HR' && !role) {
       setError('Please choose a role.');
       return;
     }
@@ -134,7 +136,13 @@ export default function Register() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => {
+      const nextState = { ...prev, [name]: value };
+      if (name === 'department' && value !== 'HR') {
+        nextState.role = 'employee';
+      }
+      return nextState;
+    });
     if (name === 'password') {
       const nextChecks = evaluatePassword(value);
       setPasswordChecks(nextChecks);
@@ -270,17 +278,21 @@ export default function Register() {
               <option value="Quality Assurance">Quality Assurance</option>
               <option value="Security">Security</option>
             </select>
-            <select
-              name="role"
-              required
-              className="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800"
-              value={formData.role}
-              onChange={handleChange}
-            >
-              <option value="employee">Employee (default)</option>
-              <option value="admin">Admin</option>
-            </select>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Choosing Admin grants elevated moderation and analytics access after email verification.</p>
+            {formData.department === 'HR' && (
+              <>
+                <select
+                  name="role"
+                  required
+                  className="appearance-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-gray-100 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800"
+                  value={formData.role}
+                  onChange={handleChange}
+                >
+                  <option value="employee">Employee (default)</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <p className="text-xs text-gray-500 dark:text-gray-400">Choosing Admin grants elevated moderation and analytics access after email verification.</p>
+              </>
+            )}
           </div>
 
           <div>

@@ -53,6 +53,7 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
 
     normalized_email = user_data.email.strip().lower()
     password_value = user_data.password.strip()
+    department_value = user_data.department.strip()
     if not is_strong_password(password_value):
         raise HTTPException(status_code=400, detail=PASSWORD_POLICY_MESSAGE)
 
@@ -65,11 +66,16 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
         )
 
     # ---- Validate role ----
-    if hasattr(user_data, "role"):  # Optional: if role exists in schema
-        if user_data.role not in ["admin", "employee"]:
-            raise HTTPException(status_code=400, detail="Invalid role specified. Use 'admin' or 'employee'.")
-    else:
-        user_data.role = "employee"  # default role if not provided
+    role_value = (getattr(user_data, "role", None) or "").strip().lower()
+    if role_value and role_value not in ["admin", "employee"]:
+        raise HTTPException(status_code=400, detail="Invalid role specified. Use 'admin' or 'employee'.")
+    if not role_value:
+        role_value = "employee"
+    if role_value == "admin" and department_value.lower() != "hr":
+        raise HTTPException(status_code=400, detail="Admin role is restricted to the HR department.")
+
+    user_data.role = role_value
+    user_data.department = department_value
 
     # ---- Hash password ----
     hashed_password = get_password_hash(password_value)
@@ -79,7 +85,7 @@ async def register(user_data: UserCreate, background_tasks: BackgroundTasks, db:
         name=user_data.name.strip(),
         email=normalized_email,
         hashed_password=hashed_password,  # ✅ Correct field name
-        department=user_data.department.strip(),
+        department=department_value,
         role=user_data.role,  # ✅ persist role so admin guard works
         is_admin=(user_data.role == "admin"),  # kept for backward compatibility
         is_active=False,
