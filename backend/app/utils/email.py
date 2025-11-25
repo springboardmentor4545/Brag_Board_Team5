@@ -186,3 +186,106 @@ def send_company_approval_email(name: str, email: str, department: Optional[str]
     msg = _build_message(subject, COMPANY_APPROVER_EMAIL, html, text)
 
     _send_message(msg)
+
+
+def send_company_approval_outcome_email(to_email: str, name: str, approved: bool) -> None:
+    """Send a confirmation email to the user after company approval decision."""
+    front_base = (FRONTEND_URL or "http://localhost:5000").rstrip("/") or "http://localhost:5000"
+    login_link = f"{front_base}/login"
+
+    if approved:
+        subject = "Welcome to Brag Board"
+        headline = "You're all set!"
+        body = (
+            f"Hi {name},<br />"
+            "<p>Your company administrator just approved your account. You can now sign in, start posting shoutouts, and celebrate your teammates.</p>"
+        )
+        cta_label = "Sign in to Brag Board"
+    else:
+        subject = "Update on your Brag Board request"
+        headline = "We're sorry"
+        body = (
+            f"Hi {name},<br />"
+            "<p>We received a response from your company administrator and they weren't able to approve your Brag Board access at this time.</p>"
+            "<p>If you think this is a mistake, please reach out to them directly and feel free to try again later.</p>"
+        )
+        cta_label = "Return to Brag Board"
+
+    text_body = (
+        f"Hi {name},\n\n"
+        + (
+            "Great news! Your company administrator approved your Brag Board account. "
+            "You can now sign in and get started.\n\n"
+            if approved
+            else
+            "We wanted to let you know that your company administrator did not approve your Brag Board access. "
+            "If this doesn't look right, please contact them directly.\n\n"
+        )
+        + f"Sign in: {login_link}\n\n"
+        + "Thanks for being part of the community!"
+    )
+
+    html_body = f"""
+    <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
+      <h2 style='color: {"#16a34a" if approved else "#dc2626"}; margin-bottom: 16px;'>{headline}</h2>
+      {body}
+      <p style='margin: 24px 0;'>
+        <a href="{login_link}" style='background:{"#16a34a" if approved else "#2563eb"};color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;'>
+          {cta_label}
+        </a>
+      </p>
+      <p style='font-size: 0.9rem; color: #475569;'>If the button above doesn't work, copy and paste this link into your browser:<br />
+        <a href="{login_link}">{login_link}</a>
+      </p>
+    </div>
+    """
+
+    if not SMTP_HOST or not (EMAIL_FROM or SMTP_USERNAME):
+        logger.info(
+            "SMTP not configured. Skipping company approval outcome email.",
+            extra={"to": to_email, "subject": subject, "body": text_body},
+        )
+        return
+
+    msg = _build_message(subject, to_email, html_body, text_body)
+    _send_message(msg)
+
+
+def send_password_change_confirmation_email(to_email: str, name: str) -> None:
+    """Notify a user that their password has been changed."""
+    front_base = (FRONTEND_URL or "http://localhost:5000").rstrip("/") or "http://localhost:5000"
+    login_link = f"{front_base}/login"
+
+    subject = "Your Brag Board password was updated"
+    text_body = (
+        f"Hi {name},\n\n"
+        "This is a confirmation that your Brag Board password was just changed. "
+        "If you made this change, you're all set.\n\n"
+        "If you didn't request this update, reset your password immediately using the link below and contact support.\n\n"
+        f"Reset password: {front_base}/forgot-password\n"
+        f"Sign in: {login_link}\n\n"
+        "Stay secure!"
+    )
+
+    html_body = f"""
+    <div style='font-family: Arial, sans-serif; line-height: 1.6; color: #0f172a;'>
+      <h2 style='color:#2563eb;'>Password successfully updated</h2>
+      <p>Hi {name},</p>
+      <p>This is a quick confirmation that your Brag Board password has been changed. If you just updated it, there's nothing else you need to do.</p>
+      <p>If this wasn't you, please reset your password immediately and get in touch with your administrator.</p>
+      <p style='margin: 24px 0;'>
+        <a href="{login_link}" style='background:#2563eb;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block;'>Sign in</a>
+      </p>
+      <p style='font-size: 0.9rem; color: #475569;'>Need help? Reset here: <a href="{front_base}/forgot-password">{front_base}/forgot-password</a></p>
+    </div>
+    """
+
+    if not SMTP_HOST or not (EMAIL_FROM or SMTP_USERNAME):
+        logger.info(
+            "SMTP not configured. Skipping password change confirmation email.",
+            extra={"to": to_email, "subject": subject, "body": text_body},
+        )
+        return
+
+    msg = _build_message(subject, to_email, html_body, text_body)
+    _send_message(msg)

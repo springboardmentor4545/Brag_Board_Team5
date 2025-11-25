@@ -31,6 +31,8 @@ from app.utils.email import (
     send_verification_email,
     send_password_reset_email,
     send_company_approval_email,
+    send_company_approval_outcome_email,
+    send_password_change_confirmation_email,
     COMPANY_APPROVER_EMAIL,
     FRONTEND_URL,
 )
@@ -501,7 +503,13 @@ async def verify_email(token: str, background_tasks: BackgroundTasks, db: Sessio
 
 
 @router.get("/company-approval", response_class=HTMLResponse)
-async def handle_company_approval(token: str, action: str, request: Request, db: Session = Depends(get_db)):
+async def handle_company_approval(
+    token: str,
+    action: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     action_normalized = (action or "").strip().lower()
     if action_normalized not in {"approve", "reject"}:
         content = _render_feedback_page(
@@ -573,6 +581,12 @@ async def handle_company_approval(token: str, action: str, request: Request, db:
         approval_request.status = "approved"
         approval_request.resolved_at = now
         db.commit()
+        background_tasks.add_task(
+            send_company_approval_outcome_email,
+            user.email,
+            user.name,
+            True,
+        )
         content = _render_feedback_page(
             "Employee Approved",
             "Thanks! The employee can now sign in to Brag Board.",
@@ -587,6 +601,12 @@ async def handle_company_approval(token: str, action: str, request: Request, db:
     user.company_verified = False
     user.is_active = False
     db.commit()
+    background_tasks.add_task(
+        send_company_approval_outcome_email,
+        user.email,
+        user.name,
+        False,
+    )
     content = _render_feedback_page(
         "Employee Rejected",
         "The employee will be notified that their access request was declined.",
@@ -620,7 +640,7 @@ async def forgot_password(req: ForgotPasswordRequest, background_tasks: Backgrou
 
 # ---------------- RESET PASSWORD ---------------- #
 @router.post("/reset-password", response_model=ResetPasswordResponse)
-async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+async def reset_password(payload: ResetPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     reset = db.query(PasswordReset).filter(PasswordReset.token == payload.token).first()
     if not reset:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
@@ -643,6 +663,12 @@ async def reset_password(payload: ResetPasswordRequest, db: Session = Depends(ge
     reset.consumed = True
     reset.consumed_at = now
     db.commit()
+
+    background_tasks.add_task(
+        send_password_change_confirmation_email,
+        user.email,
+        user.name,
+    )
 
     return {
         "message": "Password has been reset successfully",
