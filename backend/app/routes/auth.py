@@ -1,3 +1,6 @@
+import html
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
@@ -29,6 +32,7 @@ from app.utils.email import (
     send_password_reset_email,
     send_company_approval_email,
     COMPANY_APPROVER_EMAIL,
+    FRONTEND_URL,
 )
 from datetime import datetime, timedelta, timezone
 import secrets
@@ -37,6 +41,194 @@ from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+_FRONTEND_BASE = (FRONTEND_URL or "http://localhost:5000").rstrip("/") or "http://localhost:5000"
+LOGIN_URL = f"{_FRONTEND_BASE}/login"
+
+
+def _render_feedback_page(
+        title: str,
+        message: str,
+        *,
+        button_href: Optional[str] = None,
+        button_label: Optional[str] = None,
+        variant: str = "success",
+) -> str:
+        """Return a lightweight animated HTML page for verification flows."""
+
+        safe_title = html.escape(title)
+        safe_message = html.escape(message)
+        safe_button_label = html.escape(button_label) if button_label else ""
+        safe_button_href = html.escape(button_href, quote=True) if button_href else "#"
+
+        is_success = variant == "success"
+        accent = "#16a34a" if is_success else "#dc2626"
+        accent_soft = "#bbf7d0" if is_success else "#fecaca"
+        accent_mid = "#22c55e" if is_success else "#f87171"
+        shadow_rgb = "22, 163, 74" if is_success else "220, 38, 38"
+
+        icon_svg = (
+                """
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M20 6L9 17l-5-5" />
+</svg>
+                """
+                if is_success
+                else
+                """
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9" />
+    <line x1="15" y1="9" x2="9" y2="15" />
+    <line x1="9" y1="9" x2="15" y2="15" />
+</svg>
+                """
+        ).strip()
+
+        button_html = (
+                f'<a class="action" href="{safe_button_href}">{safe_button_label}</a>'
+                if button_href and button_label
+                else ""
+        )
+
+        return f"""
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{safe_title}</title>
+        <style>
+            :root {{
+                color-scheme: light;
+            }}
+            * {{
+                box-sizing: border-box;
+            }}
+            body {{
+                margin: 0;
+                font-family: "Inter", "Segoe UI", sans-serif;
+                background: #f1f5f9;
+                min-height: 100vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 24px;
+                color: #0f172a;
+            }}
+            .card {{
+                width: min(420px, 100%);
+                background: #ffffff;
+                border-radius: 16px;
+                padding: 32px 28px;
+                box-shadow: 0 24px 40px rgba(15, 23, 42, 0.12);
+                text-align: center;
+                animation: pop 480ms ease-out;
+            }}
+            .pulse-ring {{
+                width: 96px;
+                height: 96px;
+                margin: 0 auto 24px;
+                border-radius: 9999px;
+                background: {accent_soft};
+                position: relative;
+                display: grid;
+                place-items: center;
+            }}
+            .pulse-ring::after {{
+                content: "";
+                position: absolute;
+                inset: 0;
+                border-radius: inherit;
+                background: {accent_mid};
+                opacity: 0.75;
+                animation: pulse 1.6s ease-out infinite;
+            }}
+            .icon {{
+                width: 56px;
+                height: 56px;
+                color: {accent};
+                position: relative;
+                z-index: 1;
+                animation: drop 520ms ease-out;
+            }}
+            h1 {{
+                margin: 0 0 12px;
+                font-size: 1.75rem;
+                letter-spacing: -0.01em;
+            }}
+            p {{
+                margin: 0 0 28px;
+                font-size: 1rem;
+                line-height: 1.55;
+                color: #475569;
+                animation: fade 520ms ease-out;
+                animation-delay: 120ms;
+                animation-fill-mode: both;
+            }}
+            .action {{
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                padding: 12px 22px;
+                border-radius: 999px;
+                background: {accent};
+                color: #ffffff;
+                text-decoration: none;
+                font-weight: 600;
+                letter-spacing: 0.01em;
+                transition: transform 160ms ease, box-shadow 160ms ease;
+                animation: fade 520ms ease-out;
+                animation-delay: 220ms;
+                animation-fill-mode: both;
+                box-shadow: 0 12px 20px rgba({shadow_rgb}, 0.25);
+            }}
+            .action:hover {{
+                transform: translateY(-2px);
+                box-shadow: 0 14px 24px rgba({shadow_rgb}, 0.28);
+            }}
+            .action:focus-visible {{
+                outline: 3px solid rgba({shadow_rgb}, 0.4);
+                outline-offset: 2px;
+            }}
+            @keyframes pop {{
+                0% {{ transform: scale(0.92); opacity: 0; }}
+                55% {{ transform: scale(1.03); opacity: 1; }}
+                100% {{ transform: scale(1); opacity: 1; }}
+            }}
+            @keyframes drop {{
+                0% {{ transform: translateY(-12px); opacity: 0; }}
+                100% {{ transform: translateY(0); opacity: 1; }}
+            }}
+            @keyframes fade {{
+                from {{ transform: translateY(8px); opacity: 0; }}
+                to {{ transform: translateY(0); opacity: 1; }}
+            }}
+            @keyframes pulse {{
+                0% {{ transform: scale(0.85); opacity: 0.85; }}
+                70% {{ transform: scale(1.15); opacity: 0; }}
+                100% {{ transform: scale(1.15); opacity: 0; }}
+            }}
+            @media (max-width: 480px) {{
+                .card {{
+                    padding: 28px 22px;
+                }}
+                h1 {{
+                    font-size: 1.5rem;
+                }}
+            }}
+        </style>
+    </head>
+    <body>
+        <main class="card" role="status" aria-live="polite">
+            <div class="pulse-ring">
+                <div class="icon">{icon_svg}</div>
+            </div>
+            <h1>{safe_title}</h1>
+            <p>{safe_message}</p>
+            {button_html}
+        </main>
+    </body>
+</html>
+        """.strip()
 
 # ---------------- REGISTER ROUTE ---------------- #
 @router.post("/register", response_model=RegistrationResponse)
@@ -205,26 +397,54 @@ async def refresh(refresh_data: RefreshRequest, db: Session = Depends(get_db)):
 
 
 # ---------------- VERIFY EMAIL VIA TOKEN ---------------- #
-@router.get("/verify-email")
+@router.get("/verify-email", response_class=HTMLResponse)
 async def verify_email(token: str, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     verification = db.query(EmailVerification).filter(EmailVerification.token == token).first()
     if not verification:
-        raise HTTPException(status_code=400, detail="Invalid verification token")
+        content = _render_feedback_page(
+            "Link Invalid",
+            "We could not find a matching verification request. The link may have already been used or is incorrect.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=400)
 
     if verification.consumed:
-        return success_response("Email already verified")
+        content = _render_feedback_page(
+            "Email Already Verified",
+            "You're all set. You can sign in with your credentials whenever you're ready.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+        )
+        return HTMLResponse(content, status_code=200)
 
     now = datetime.now(timezone.utc)
     if verification.expires_at < now:
-        raise HTTPException(status_code=400, detail="Verification token has expired")
+        content = _render_feedback_page(
+            "Verification Link Expired",
+            "The verification window has closed. Please sign in and request a new verification email.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=400)
 
     user = db.query(User).filter(User.id == verification.user_id).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        content = _render_feedback_page(
+            "User Not Found",
+            "We could not locate the account associated with this verification link.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=404)
 
     user.email_verified = True
-    approval_token = None
-    message = "Email verified successfully. You can now log in."
+    approval_token: Optional[str] = None
+    title = "Email Verified"
+    message = "Your email is verified. You can sign in with your account now."
 
     if user.company_verified:
         user.is_active = True
@@ -252,7 +472,10 @@ async def verify_email(token: str, background_tasks: BackgroundTasks, db: Sessio
             )
             db.add(approval_request)
 
-        message = "Email verified successfully. Waiting for company verification."
+        message = (
+            "Your email is verified! An administrator at your company still needs to approve your access. "
+            "We'll email you as soon as that's done."
+        )
 
     verification.consumed = True
     verification.consumed_at = now
@@ -268,37 +491,77 @@ async def verify_email(token: str, background_tasks: BackgroundTasks, db: Sessio
             approval_token
         )
 
-    return success_response(message)
+    content = _render_feedback_page(
+        title,
+        message,
+        button_href=LOGIN_URL,
+        button_label="Go to Login",
+    )
+    return HTMLResponse(content, status_code=200)
 
 
 @router.get("/company-approval", response_class=HTMLResponse)
 async def handle_company_approval(token: str, action: str, request: Request, db: Session = Depends(get_db)):
     action_normalized = (action or "").strip().lower()
     if action_normalized not in {"approve", "reject"}:
-        return HTMLResponse("<h2>Invalid action</h2><p>Please use the Approve or Reject links provided in the email.</p>", status_code=400)
+        content = _render_feedback_page(
+            "Invalid Approval Action",
+            "Please use one of the verification links provided in the approval email.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=400)
 
     approval_request = db.query(CompanyApprovalRequest).filter(CompanyApprovalRequest.token == token).first()
     if not approval_request:
-        return HTMLResponse("<h2>Invalid or expired link</h2><p>The approval request could not be found. It may have already been processed.</p>", status_code=404)
+        content = _render_feedback_page(
+            "Approval Link Not Found",
+            "We could not locate this approval request. It may have already been processed or expired.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=404)
 
     now = datetime.now(timezone.utc)
 
     if approval_request.status != "pending":
         status_text = approval_request.status.capitalize()
-        return HTMLResponse(f"<h2>Request Already {status_text}</h2><p>This request was previously processed.</p>", status_code=200)
+        content = _render_feedback_page(
+            "Request Already Processed",
+            f"This approval request was previously {status_text.lower()}. No further action is needed.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+        )
+        return HTMLResponse(content, status_code=200)
 
     if approval_request.expires_at < now:
         approval_request.status = "expired"
         approval_request.resolved_at = now
         db.commit()
-        return HTMLResponse("<h2>Link Expired</h2><p>The approval link has expired. Ask the employee to verify their email again.</p>", status_code=400)
+        content = _render_feedback_page(
+            "Approval Link Expired",
+            "The approval window has passed. Ask the employee to restart the verification process.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=400)
 
     user = db.query(User).filter(User.id == approval_request.user_id).first()
     if not user:
         approval_request.status = "rejected"
         approval_request.resolved_at = now
         db.commit()
-        return HTMLResponse("<h2>User Not Found</h2><p>The user associated with this request no longer exists.</p>", status_code=404)
+        content = _render_feedback_page(
+            "User Not Found",
+            "The employee record linked to this request no longer exists.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+            variant="error",
+        )
+        return HTMLResponse(content, status_code=404)
 
     approval_request.action_ip = request.client.host if request.client else None
     if COMPANY_APPROVER_EMAIL:
@@ -310,15 +573,28 @@ async def handle_company_approval(token: str, action: str, request: Request, db:
         approval_request.status = "approved"
         approval_request.resolved_at = now
         db.commit()
-        return HTMLResponse("<h2>User Approved</h2><p>The employee can now log in.</p>", status_code=200)
+        content = _render_feedback_page(
+            "Employee Approved",
+            "Thanks! The employee can now sign in to Brag Board.",
+            button_href=LOGIN_URL,
+            button_label="Go to Login",
+        )
+        return HTMLResponse(content, status_code=200)
 
-    # Reject flow: remove the user record and mark the request
+    # Reject flow
     approval_request.status = "rejected"
     approval_request.resolved_at = now
     user.company_verified = False
     user.is_active = False
     db.commit()
-    return HTMLResponse("<h2>User Rejected</h2><p>The user will not be able to sign in.</p>", status_code=200)
+    content = _render_feedback_page(
+        "Employee Rejected",
+        "The employee will be notified that their access request was declined.",
+        button_href=LOGIN_URL,
+        button_label="Go to Login",
+        variant="error",
+    )
+    return HTMLResponse(content, status_code=200)
 
 
 # ---------------- FORGOT PASSWORD ---------------- #
