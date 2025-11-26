@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminAPI, shoutoutAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { useToast } from '../context/ToastContext';
+import { useToast } from '../context/useToast';
 import DepartmentStatsChart from '../../src/components/admin/DepartmentStatsChart';
 
 export default function Admin() {
@@ -10,7 +10,6 @@ export default function Admin() {
   const navigate = useNavigate();
   const { addToast } = useToast();
   const [analytics, setAnalytics] = useState(null);
-  const [leaderboard, setLeaderboard] = useState(null);
   const [shoutoutReports, setShoutoutReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [shoutoutPreview, setShoutoutPreview] = useState({ open: false, data: null, loading: false, error: '' });
@@ -38,7 +37,18 @@ export default function Admin() {
   const [exportEndDate, setExportEndDate] = useState('');
   const [exporting, setExporting] = useState(null);
 
-  const fetchDepartmentRequests = async (statusOverride) => {
+  const fetchData = useCallback(async () => {
+    try {
+      const analyticsRes = await adminAPI.getAnalytics();
+      setAnalytics(analyticsRes.data);
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const fetchDepartmentRequests = useCallback(async (statusOverride) => {
     const status = statusOverride ?? requestFilter;
     setRequestLoading(true);
     try {
@@ -49,57 +59,9 @@ export default function Admin() {
     } finally {
       setRequestLoading(false);
     }
-  };
+  }, [requestFilter]);
 
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user || user.role !== 'admin') {
-      navigate('/');
-      return;
-    }
-    fetchData();
-  }, [authLoading, user]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user || user.role !== 'admin') {
-      return;
-    }
-    fetchDepartmentRequests();
-  }, [authLoading, user, requestFilter]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user || user.role !== 'admin') {
-      return;
-    }
-    fetchShoutoutReports();
-  }, [authLoading, user, shoutoutReportFilter]);
-
-  useEffect(() => {
-    if (authLoading) return;
-    if (!user || user.role !== 'admin') {
-      return;
-    }
-    fetchCommentReports();
-  }, [authLoading, user, commentReportFilter]);
-
-  const fetchData = async () => {
-    try {
-      const [analyticsRes, leaderboardRes] = await Promise.all([
-        adminAPI.getAnalytics(),
-        adminAPI.getLeaderboard(),
-      ]);
-      setAnalytics(analyticsRes.data);
-      setLeaderboard(leaderboardRes.data);
-    } catch (error) {
-      console.error('Error fetching admin data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchShoutoutReports = async (statusOverride) => {
+  const fetchShoutoutReports = useCallback(async (statusOverride) => {
     const status = statusOverride ?? shoutoutReportFilter;
     setShoutoutReportLoading(true);
     try {
@@ -110,9 +72,9 @@ export default function Admin() {
     } finally {
       setShoutoutReportLoading(false);
     }
-  };
+  }, [shoutoutReportFilter]);
 
-  const fetchCommentReports = async (statusOverride) => {
+  const fetchCommentReports = useCallback(async (statusOverride) => {
     const status = statusOverride ?? commentReportFilter;
     setCommentReportLoading(true);
     try {
@@ -123,7 +85,40 @@ export default function Admin() {
     } finally {
       setCommentReportLoading(false);
     }
-  };
+  }, [commentReportFilter]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || user.role !== 'admin') {
+      navigate('/');
+      return;
+    }
+    fetchData();
+  }, [authLoading, fetchData, navigate, user]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || user.role !== 'admin') {
+      return;
+    }
+    fetchDepartmentRequests();
+  }, [authLoading, fetchDepartmentRequests, user]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || user.role !== 'admin') {
+      return;
+    }
+    fetchShoutoutReports();
+  }, [authLoading, fetchShoutoutReports, user]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || user.role !== 'admin') {
+      return;
+    }
+    fetchCommentReports();
+  }, [authLoading, fetchCommentReports, user]);
 
   const handleResolveShoutoutReport = async (reportId, action) => {
     setResolvingShoutoutReportId(reportId);

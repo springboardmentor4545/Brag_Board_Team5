@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { shoutoutAPI, reactionAPI, commentAPI } from '../services/api';
 import CreateShoutout from '../components/shoutouts/CreateShoutout';
@@ -11,7 +11,7 @@ export default function MyShoutouts() {
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
 
-  const fetchShoutouts = async (options = {}) => {
+  const fetchShoutouts = useCallback(async (options = {}) => {
     const opts = (options && typeof options === 'object') ? options : {};
     const { silent = false } = opts;
     if (!user?.id) return;
@@ -29,11 +29,11 @@ export default function MyShoutouts() {
         setLoading(false);
       }
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     fetchShoutouts();
-  }, [user?.id]);
+  }, [fetchShoutouts]);
 
   const handleCreateShoutout = async (data) => {
     try {

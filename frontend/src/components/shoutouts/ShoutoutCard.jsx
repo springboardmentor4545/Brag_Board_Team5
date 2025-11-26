@@ -117,17 +117,23 @@ export default function ShoutoutCard({
 
   useEffect(() => {
     if (!commentEditState.commentId) {
-      if (commentEditMention.show || commentEditMention.query) {
-        setCommentEditMention({ query: '', suggestions: [], activeIndex: 0, show: false });
-      }
+      setCommentEditMention((state) => {
+        if (!state.show && !state.query && state.suggestions.length === 0) {
+          return state;
+        }
+        return { query: '', suggestions: [], activeIndex: 0, show: false };
+      });
       return;
     }
 
     const query = commentEditMention.query;
     if (!query) {
-      if (commentEditMention.suggestions.length || commentEditMention.show) {
-        setCommentEditMention((state) => ({ ...state, suggestions: [], show: false, activeIndex: 0 }));
-      }
+      setCommentEditMention((state) => {
+        if (state.suggestions.length === 0 && !state.show) {
+          return state;
+        }
+        return { ...state, suggestions: [], show: false, activeIndex: 0 };
+      });
       return;
     }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { shoutoutAPI, reactionAPI, commentAPI } from '../services/api';
 import ShoutoutCard from '../components/shoutouts/ShoutoutCard';
@@ -9,7 +9,7 @@ export default function TaggedShoutouts() {
   const [shoutouts, setShoutouts] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchShoutouts = async (options = {}) => {
+  const fetchShoutouts = useCallback(async (options = {}) => {
     const opts = (options && typeof options === 'object') ? options : {};
     const { silent = false } = opts;
     if (!user?.id) return;
@@ -27,11 +27,11 @@ export default function TaggedShoutouts() {
         setLoading(false);
       }
     }
-  };
+  }, [user?.id]);
 
   useEffect(() => {
     fetchShoutouts();
-  }, [user?.id]);
+  }, [fetchShoutouts]);
 
   const handleReaction = async (shoutoutId, reactionType, isAdding, replacedTypes = []) => {
     const previousState = shoutouts.map((item) => ({

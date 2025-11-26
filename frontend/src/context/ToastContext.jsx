@@ -1,7 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TOAST_EVENT } from '../utils/toast.js';
-
-const ToastContext = createContext(null);
+import ToastContext from './toastContext';
 
 const DEFAULT_DURATION = 4000;
 
@@ -83,11 +82,3 @@ export function ToastProvider({ children }) {
     </ToastContext.Provider>
   );
 }
-
-export const useToast = () => {
-  const context = useContext(ToastContext);
-  if (!context) {
-    throw new Error('useToast must be used within a ToastProvider');
-  }
-  return context;
-};
