@@ -22,6 +22,7 @@ export default function Admin() {
   const [roleRequestFilter, setRoleRequestFilter] = useState('pending');
   const [roleRequestLoading, setRoleRequestLoading] = useState(false);
   const [processingRoleRequestId, setProcessingRoleRequestId] = useState(null);
+  const [roleRequestsSupported, setRoleRequestsSupported] = useState(true);
   const [shoutoutReportFilter, setShoutoutReportFilter] = useState('pending');
   const [shoutoutReportLoading, setShoutoutReportLoading] = useState(false);
   const [resolvingShoutoutReportId, setResolvingShoutoutReportId] = useState(null);
@@ -77,17 +78,29 @@ export default function Admin() {
   }, [requestFilter]);
 
   const fetchRoleRequests = useCallback(async (statusOverride) => {
+    if (!roleRequestsSupported) {
+      return;
+    }
     const status = statusOverride ?? roleRequestFilter;
     setRoleRequestLoading(true);
     try {
-      const res = await adminAPI.getRoleChangeRequests(status === 'all' ? undefined : status);
+      const res = await adminAPI.getRoleChangeRequests(
+        status === 'all' ? undefined : status,
+        { skipErrorToast: true }
+      );
       setRoleRequests(res.data || []);
     } catch (error) {
-      console.error('Error fetching role change requests:', error);
+      if (error?.response?.status === 404) {
+        console.info('Role change requests endpoint not available; disabling section.');
+        setRoleRequestsSupported(false);
+        setRoleRequests([]);
+      } else {
+        console.error('Error fetching role change requests:', error);
+      }
     } finally {
       setRoleRequestLoading(false);
     }
-  }, [roleRequestFilter]);
+  }, [roleRequestFilter, roleRequestsSupported]);
 
   const fetchShoutoutReports = useCallback(async (statusOverride) => {
     const status = statusOverride ?? shoutoutReportFilter;
@@ -137,8 +150,10 @@ export default function Admin() {
     if (!user || user.role !== 'admin') {
       return;
     }
-    fetchRoleRequests();
-  }, [authLoading, fetchRoleRequests, user]);
+    if (roleRequestsSupported) {
+      fetchRoleRequests();
+    }
+  }, [authLoading, fetchRoleRequests, roleRequestsSupported, user]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -232,6 +247,9 @@ export default function Admin() {
   };
 
   const handleRoleDecision = async (requestId, action) => {
+    if (!roleRequestsSupported) {
+      return;
+    }
     setProcessingRoleRequestId(requestId);
     const pastTense = action === 'approved' ? 'approved' : 'rejected';
     const verb = action === 'approved' ? 'approve' : 'reject';
@@ -306,7 +324,7 @@ export default function Admin() {
       return;
     }
     const mapping = {
-      'role-requests': roleSectionRef,
+      ...(roleRequestsSupported ? { 'role-requests': roleSectionRef } : {}),
       'department-requests': departmentSectionRef,
       'shoutout-reports': shoutoutReportsRef,
       'comment-reports': commentReportsRef,
@@ -323,7 +341,7 @@ export default function Admin() {
       }
       setHighlightedSection(section);
     }
-  }, [searchParams]);
+  }, [roleRequestsSupported, searchParams]);
 
   useEffect(() => {
     if (!highlightedSection) {
@@ -542,6 +560,7 @@ export default function Admin() {
           <DepartmentStatsChart data={analytics?.department_stats} />
         </div>
 
+        {roleRequestsSupported && (
         <div
           ref={roleSectionRef}
           className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'role-requests' ? 'ring-2 ring-blue-500' : ''}`}
@@ -646,6 +665,7 @@ export default function Admin() {
             </div>
           )}
         </div>
+        )}
 
         <div
           ref={departmentSectionRef}
