@@ -4,12 +4,14 @@ import { shoutoutAPI, reactionAPI, commentAPI } from '../services/api';
 import CreateShoutout from '../components/shoutouts/CreateShoutout';
 import ShoutoutCard from '../components/shoutouts/ShoutoutCard';
 import ErrorBoundary from '../components/common/ErrorBoundary';
+import '../App.css';
 
 export default function MyShoutouts() {
   const { user } = useAuth();
   const [shoutouts, setShoutouts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   const fetchShoutouts = useCallback(async (options = {}) => {
     const opts = (options && typeof options === 'object') ? options : {};
@@ -34,6 +36,15 @@ export default function MyShoutouts() {
   useEffect(() => {
     fetchShoutouts();
   }, [fetchShoutouts]);
+
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsMounted(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsMounted(true), 16);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const handleCreateShoutout = async (data) => {
     try {
@@ -123,9 +134,12 @@ export default function MyShoutouts() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition" key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}>
-      <div className="max-w-2xl mx-auto py-8 px-4 page-container">
-        <div className="flex items-center justify-between mb-6">
+    <div
+      className={`min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition my-shoutouts-page feed-page ${isMounted ? 'is-mounted' : ''}`}
+      key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}
+    >
+      <div className="max-w-2xl mx-auto py-8 px-4 page-container feed-shell">
+        <div className="flex items-center justify-between mb-6 my-shoutouts-header">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">My Shout-Outs</h1>
             <p className="text-sm text-gray-500 dark:text-gray-400">All the appreciation you've shared with teammates.</p>
@@ -139,16 +153,16 @@ export default function MyShoutouts() {
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center py-20">
+          <div className="flex justify-center items-center py-20 my-shoutouts-state">
             <div className="text-lg text-gray-600 dark:text-gray-300">Loading your shout-outs…</div>
           </div>
         ) : shoutouts.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-12 my-shoutouts-state">
             <p className="text-gray-500 dark:text-gray-400">You haven't posted any shout-outs yet. Start by appreciating someone today!</p>
           </div>
         ) : (
           <ErrorBoundary>
-            <div className="space-y-4">
+            <div className="space-y-4 my-shoutouts-list feed-list">
               {shoutouts.map((shoutout) => (
                 <ShoutoutCard
                   key={shoutout.id}

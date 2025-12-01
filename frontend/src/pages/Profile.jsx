@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { userAPI } from '../services/api';
 import Avatar from '../components/common/Avatar';
+import '../App.css';
 
 export default function Profile() {
   const { user, setUser } = useAuth();
@@ -14,6 +15,7 @@ export default function Profile() {
   const [error, setError] = useState('');
   const [avatarPreview, setAvatarPreview] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
   const avatarObjectUrlRef = useRef(null);
   const isUserHr = (user?.department || '').toLowerCase() === 'hr';
   const canRequestRoleChange = isUserHr || user?.role === 'admin';
@@ -38,6 +40,15 @@ export default function Profile() {
     if (avatarObjectUrlRef.current) {
       URL.revokeObjectURL(avatarObjectUrlRef.current);
     }
+  }, []);
+
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsMounted(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsMounted(true), 16);
+    return () => clearTimeout(timeout);
   }, []);
 
   const handleAvatarChange = (event) => {
@@ -148,24 +159,24 @@ export default function Profile() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8">
-      <div className="max-w-2xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">My Profile</h1>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
-          <form onSubmit={handleSubmit} className="space-y-6">
+    <div className={`min-h-screen bg-gray-50 dark:bg-gray-950 py-8 feed-page profile-page ${isMounted ? 'is-mounted' : ''}`}>
+      <div className="max-w-2xl mx-auto px-4 page-container feed-shell profile-shell">
+        <h1 className="profile-title text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">My Profile</h1>
+        <div className="profile-card bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
+          <form onSubmit={handleSubmit} className="space-y-6 profile-form">
             {error && (
-              <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-600 text-red-700 dark:text-red-300 px-4 py-3 rounded">
+              <div className="profile-alert profile-alert--error">
                 {error}
               </div>
             )}
             {success && (
-              <div className={`${successAlertClasses} px-4 py-3 rounded`}>
+              <div className={`profile-alert ${successAlertClasses}`}>
                 {success}
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Profile Photo</label>
-              <div className="mt-3 flex items-center gap-4">
+              <label className="profile-label block text-sm font-medium text-gray-700 dark:text-gray-300">Profile Photo</label>
+              <div className="mt-3 flex items-center gap-4 profile-avatar-row">
                 <Avatar src={avatarPreview || undefined} name={user.name} size="lg" />
                 <div className="flex flex-col gap-2">
                   <label className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer">
@@ -183,7 +194,7 @@ export default function Profile() {
                     <button
                       type="button"
                       onClick={resetAvatarSelection}
-                      className="text-xs text-red-500 hover:text-red-600"
+                      className="text-xs text-red-500 hover:text-red-600 profile-avatar-reset"
                       disabled={loading}
                     >
                       Cancel new photo
@@ -193,32 +204,32 @@ export default function Profile() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
+              <label className="profile-label block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400"
+                className="profile-input mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 placeholder-gray-400"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+              <label className="profile-label block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
               <input
                 type="email"
                 disabled
                 value={user.email}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 sm:text-sm text-gray-900 dark:text-gray-100"
+                className="profile-input mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm bg-gray-100 dark:bg-gray-700 sm:text-sm text-gray-900 dark:text-gray-100"
               />
             </div>
             {/* {user?.role !== 'admin' && ( */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
+                <label className="profile-label block text-sm font-medium text-gray-700 dark:text-gray-300">Department</label>
                 <select
                   required
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  className="profile-input mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                 >
                   <option value="HR">HR</option>
                   <option value="Finance">Finance</option>
@@ -231,12 +242,12 @@ export default function Profile() {
             {/* )} */}
             {showRoleSelector && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
+                <label className="profile-label block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
                 <select
                   value={roleSelection}
                   onChange={(e) => setRoleSelection(e.target.value)}
                   disabled={loading}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                  className="profile-input mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                 >
                   <option value="employee">Employee (default)</option>
                   <option value="admin">Admin</option>
@@ -252,7 +263,7 @@ export default function Profile() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                className="profile-submit w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
               >
                 {loading ? 'Saving...' : 'Save Changes'}
               </button>

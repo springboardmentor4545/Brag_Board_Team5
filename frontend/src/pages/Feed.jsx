@@ -4,6 +4,7 @@ import { shoutoutAPI, commentAPI, reactionAPI, userAPI } from '../services/api';
 import CreateShoutout from '../components/shoutouts/CreateShoutout';
 import ShoutoutCard from '../components/shoutouts/ShoutoutCard';
 import ErrorBoundary from '../components/common/ErrorBoundary';
+import '../App.css';
 
 const parseFocusParams = (params) => {
   if (!params) {
@@ -48,6 +49,7 @@ export default function Feed() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [pendingFocus, setPendingFocus] = useState(() => parseFocusParams(searchParams));
   const [highlightedShoutoutId, setHighlightedShoutoutId] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
   const focusAppliedRef = useRef(null);
 
   const handleFocusHandled = useCallback(() => {
@@ -80,6 +82,15 @@ export default function Feed() {
       focusAppliedRef.current = null;
     }
   }, [pendingFocus]);
+
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsMounted(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsMounted(true), 16);
+    return () => clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     if (!pendingFocus?.shoutoutId) {
@@ -278,11 +289,14 @@ export default function Feed() {
   }
 
   return (
-  <div className="min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition" key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}>
-      <div className="max-w-2xl mx-auto py-8 px-4 page-container">
+  <div
+      className={`min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition feed-page ${isMounted ? 'is-mounted' : ''}`}
+      key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}
+    >
+      <div className="max-w-2xl mx-auto py-8 px-4 page-container feed-shell">
         {feedback.message && (
           <div
-            className={`mb-4 px-4 py-3 rounded border flex items-start justify-between gap-3 ${
+            className={`mb-4 px-4 py-3 rounded border flex items-start justify-between gap-3 feed-feedback ${
               feedback.type === 'success'
                 ? 'bg-green-100 dark:bg-green-900/40 border-green-400 dark:border-green-700 text-green-700 dark:text-green-300'
                 : 'bg-red-100 dark:bg-red-900/40 border-red-400 dark:border-red-600 text-red-700 dark:text-red-300'
@@ -317,7 +331,7 @@ export default function Feed() {
             </div>
           </div>
           {showFilters && (
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-lg shadow flex flex-wrap gap-4 items-end">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-4 rounded-lg shadow flex flex-wrap gap-4 items-end feed-filters">
             <div className="flex flex-col w-full sm:w-auto">
               <label className="text-xs font-semibold text-gray-600 dark:text-gray-300">Department (Sender)</label>
               <select
@@ -392,7 +406,7 @@ export default function Feed() {
             <p className="text-gray-500 dark:text-gray-400">No shout-outs yet. Be the first to post!</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-4 feed-list">
             <ErrorBoundary>
               {shoutouts.map((shoutout) => (
                 <ShoutoutCard

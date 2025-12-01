@@ -53,28 +53,33 @@ export function ToastProvider({ children }) {
   return (
     <ToastContext.Provider value={contextValue}>
       {children}
-      <div className="fixed top-4 right-4 z-[1000] flex flex-col gap-3 max-w-sm">
+      <div className="toast-stack pointer-events-none">
         {toasts.map((toast) => {
-          const colorClasses = toast.type === 'success'
-            ? 'bg-green-600 text-white'
+          const typeClass = toast.type === 'success'
+            ? 'toast-item--success'
             : toast.type === 'error'
-              ? 'bg-red-600 text-white'
-              : 'bg-blue-600 text-white';
+              ? 'toast-item--error'
+              : 'toast-item--info';
+          const durationStyle = toast.duration !== null
+            ? { '--toast-duration': `${toast.duration}ms` }
+            : undefined;
           return (
             <div
               key={toast.id}
-              className={`${colorClasses} shadow-lg rounded-md px-4 py-3 flex items-start gap-3 animate-fade-in`}
+              className={`toast-item ${typeClass}`}
+              style={durationStyle}
               role="status"
             >
-              <span className="text-sm leading-5 flex-1">{toast.message}</span>
+              <span className="toast-message">{toast.message}</span>
               <button
                 type="button"
                 onClick={() => removeToast(toast.id)}
-                className="text-sm font-semibold opacity-80 hover:opacity-100"
+                className="toast-dismiss"
                 aria-label="Dismiss notification"
               >
                 ×
               </button>
+              {toast.duration !== null && <span className="toast-progress" aria-hidden="true" />}
             </div>
           );
         })}

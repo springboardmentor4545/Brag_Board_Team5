@@ -1,7 +1,23 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { isValidEmail } from '../utils/validation';
+import '../App.css';
+
+const HERO_FEATURES = [
+  {
+    title: 'Pick up where you left off',
+    description: 'Jump straight into live shoutouts, queued approvals, and trending reactions without missing a beat.',
+  },
+  {
+    title: 'Stay in sync across teams',
+    description: 'Follow recognition streaks, join momentum in real time, and never miss a teammate getting celebrated.',
+  },
+  {
+    title: 'Own your personal highlight reel',
+    description: 'Track the praise rolling in, respond fast, and keep your brag book updated effortlessly.',
+  },
+];
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -9,6 +25,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [activeFeature, setActiveFeature] = useState(0);
   const { login } = useAuth();
   const navigate = useNavigate();
   const isPendingApproval = error === 'Waiting for company verification';
@@ -17,8 +35,24 @@ export default function Login() {
   //   return /^(?=.*[A-Za-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(value);
   // };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsReady(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsReady(true), 16);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setActiveFeature((prev) => (prev + 1) % HERO_FEATURES.length);
+    }, 4200);
+    return () => clearInterval(intervalId);
+  }, []);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
     setError('');
     const normalizedEmail = email.trim();
     const passwordValue = password.trim();
@@ -53,95 +87,159 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-950 py-12 px-4 sm:px-6 lg:px-8 relative transition-colors">
+    <div className="register-page">
+      <div className="register-gradient" aria-hidden="true" />
+      <span className="register-blob register-blob-one" aria-hidden="true" />
+      <span className="register-blob register-blob-two" aria-hidden="true" />
+      <span className="register-blob register-blob-three" aria-hidden="true" />
 
-      {/* --- Top Left Company Logo + Name --- */}
-      <div className="absolute top-6 left-6 flex items-center space-x-2">
-        <Link 
-          to="/login" 
-          className="text-blue-600 dark:text-blue-400 font-bold text-3xl"
-        >
-          Brag Board
+      <header className="register-header">
+        <Link to="/" className="register-brand" aria-label="Brag Board home">
+          <span className="register-brand-mark">Brag Board</span>
+          <span className="register-brand-pill">Recognition stream</span>
         </Link>
-       
-      </div>
+        <Link to="/register" className="btn btn-outline register-header-cta">
+          Create account
+        </Link>
+      </header>
 
-      {/* --- Login Form Container --- */}
-      <div className="flex flex-grow items-center justify-center">
-        <div className="max-w-md w-full space-y-8">
-          <div>
-            <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-gray-100">
-              Sign in to your account
-            </h2>
-          </div>
+      <main className="register-main">
+        <div className="register-grid">
+          <section className={`register-hero ${isReady ? 'register-hero-enter' : ''}`}>
+            <p className="register-kicker">Welcome back</p>
+            <h1 className="register-title">Keep the recognition flywheel spinning.</h1>
+            <p className="register-subtitle">
+              Dive back into the curated social feed where teammates hype each other up, request boosts, and keep morale soaring.
+            </p>
 
-          <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+            <ul className="register-feature-list">
+              {HERO_FEATURES.map((feature, index) => {
+                const isActive = activeFeature === index;
+                return (
+                  <li
+                    key={feature.title}
+                    className={`register-feature ${isActive ? 'is-active' : ''}`}
+                    onMouseEnter={() => setActiveFeature(index)}
+                    onFocus={() => setActiveFeature(index)}
+                    onClick={() => setActiveFeature(index)}
+                    role="button"
+                    aria-pressed={isActive}
+                    tabIndex={0}
+                  >
+                    <span className="register-feature-index">{String(index + 1).padStart(2, '0')}</span>
+                    <div>
+                      <p className="register-feature-title">{feature.title}</p>
+                      <p className="register-feature-description">{feature.description}</p>
+                    </div>
+                    <span className="register-feature-glow" aria-hidden="true" />
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="register-hero-footer">
+              <div className="register-stat-card">
+                <div className="register-stat-number">7m</div>
+                <p className="register-stat-label">Average time to reply to a shoutout</p>
+              </div>
+              <div className="register-avatar-stack" aria-hidden="true">
+                <span className="register-avatar">
+                  <img src="../av1.png" alt="" loading="lazy" />
+                </span>
+                <span className="register-avatar">
+                  <img src="../av2.png" alt="" loading="lazy" />
+                </span>
+                <span className="register-avatar">
+                  <img src="../av3.png" alt="" loading="lazy" />
+                </span>
+                <span className="register-avatar">
+                  <img src="../av4.png" alt="" loading="lazy" />
+                </span>
+              </div>
+              <p className="register-stat-note">Your peers are tagging teammates right now—jump in and add your boost.</p>
+            </div>
+          </section>
+
+          <section className={`register-card register-card--login ${isReady ? 'register-card-enter' : ''}`}>
+            <div className="register-card-header">
+              <h2>Sign in to Brag Board</h2>
+              <p>Secure login for teammates keeping the kudos flowing.</p>
+            </div>
+
             {error && (
               <div
-                className={`px-4 py-3 rounded border ${
-                  isPendingApproval
-                    ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-400 dark:border-blue-600 text-blue-800 dark:text-blue-300'
-                    : 'bg-red-100 dark:bg-red-900/40 border-red-400 dark:border-red-600 text-red-700 dark:text-red-300'
-                }`}
+                className={`register-alert ${isPendingApproval ? 'is-info' : 'is-error'}`}
+                role="alert"
               >
                 {isPendingApproval ? 'Waiting for company verification' : error}
               </div>
             )}
 
-            <div className="rounded-md shadow-sm -space-y-px">
-              <div>
+            <form className="register-form" onSubmit={handleSubmit}>
+              <div className="register-field">
+                <label className="register-label" htmlFor="email">Work email</label>
                 <input
+                  id="email"
+                  name="email"
                   type="email"
+                  autoComplete="email"
                   required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 text-gray-900 dark:text-gray-100 rounded-t-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800"
-                  placeholder="Email address"
+                  className="register-input"
+                  placeholder="you@company.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
                 />
               </div>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 placeholder-gray-500 text-gray-900 dark:text-gray-100 rounded-b-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 focus:z-10 sm:text-sm bg-white dark:bg-gray-800"
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute inset-y-0 right-0 px-3 flex items-center text-xs font-medium text-blue-600 dark:text-blue-300"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                >
-                  {showPassword ? 'Hide' : 'Show'}
-                </button>
-              </div>
-            </div>
 
-            <div>
+              <div className="register-field">
+                <div className="register-label-row">
+                  <label className="register-label" htmlFor="password">Password</label>
+                  <Link to="/forgot-password" className="register-inline-link register-inline-link--muted">
+                    Forgot password?
+                  </Link>
+                </div>
+
+                <div className="register-password-field">
+                  <input
+                    id="password"
+                    name="password"
+                    type={showPassword ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    required
+                    className="register-input register-password-input"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    className="register-password-toggle no-anim"
+                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showPassword ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="submit"
                 disabled={loading}
-                className="btn btn-primary w-full text-sm disabled:opacity-50"
+                className="btn btn-primary register-submit"
               >
                 {loading ? 'Signing in...' : 'Sign in'}
               </button>
-            </div>
+            </form>
 
-            <div className="text-center">
-              <Link to="/register" className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300">
-                Don't have an account? Sign up
-              </Link>
-              <div className="mt-2">
-                <Link to="/forgot-password" className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300">
-                  Forgot your password?
-                </Link>
-              </div>
-            </div>
-          </form>
+            <div className="register-divider" aria-hidden="true" />
+
+            <p className="register-footer-link">
+              New to Brag Board?{' '}
+              <Link to="/register" className="register-inline-link">Create an account</Link>
+            </p>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

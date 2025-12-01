@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { commentAPI, reactionAPI, adminAPI, shoutoutAPI, userAPI } from '../../services/api';
 import CommentInput from './CommentInput';
 import Avatar from '../common/Avatar';
 import { extractMentionIds, parseMentions, encodeMentionPayload } from '../../utils/mentions';
 import { emitToast } from '../../utils/toast.js';
 import { useAuth } from '../../context/AuthContext';
+import '../../App.css';
 
 const REACTION_TYPES = [
   { type: 'like', label: 'Like', icon: '👍' },
@@ -54,6 +56,8 @@ export default function ShoutoutCard({
   const [commentDeleteState, setCommentDeleteState] = useState({ open: false, commentId: null, submitting: false, error: '' });
   const [commentEditMention, setCommentEditMention] = useState({ query: '', suggestions: [], activeIndex: 0, show: false });
   const [highlightedCommentId, setHighlightedCommentId] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
+  const portalElement = typeof document !== 'undefined' ? document.body : null;
   // no local loading state required for now
   const reactionMenuTimeoutRef = useRef(null);
   const commentFeedbackTimeoutRef = useRef(null);
@@ -74,6 +78,26 @@ export default function ShoutoutCard({
   useEffect(() => {
     setEditMessage(shoutout.message || '');
   }, [shoutout.message]);
+
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsMounted(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsMounted(true), 16);
+    return () => clearTimeout(timeout);
+  }, []);
+
+  useEffect(() => {
+    if (!reportModal.open || typeof document === 'undefined') {
+      return undefined;
+    }
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [reportModal.open]);
 
   useEffect(() => {
     if (!actionsMenuOpen) return undefined;
@@ -686,11 +710,11 @@ export default function ShoutoutCard({
   return (
     <div
       data-shoutout-id={shoutout.id}
-      className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow p-4 sm:p-6 card transition-shadow ${
-        isHighlighted ? 'ring-2 ring-blue-400 dark:ring-blue-500 shadow-lg' : ''
-      }`}
+      className={`shoutout-card bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg shadow p-4 sm:p-6 card transition-shadow ${
+        isMounted ? 'is-mounted' : ''
+      } ${isHighlighted ? 'ring-2 ring-blue-400 dark:ring-blue-500 shadow-lg shoutout-card--highlight' : ''}`}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:space-x-3 mb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:space-x-3 mb-4 shoutout-card-header">
         <div className="flex-shrink-0">
           <Avatar src={shoutout.sender?.avatar_url} name={shoutout.sender?.name} />
         </div>
@@ -753,21 +777,21 @@ export default function ShoutoutCard({
           </div>
           <p className="text-gray-800 dark:text-gray-100 mt-2 whitespace-pre-wrap break-words">{renderMentions(shoutout.message)}</p>
           {Array.isArray(shoutout.attachments) && shoutout.attachments.length > 0 && (
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 shoutout-card-attachments">
               {shoutout.attachments.map((att, idx) => (
                 <AttachmentPreview key={idx} attachment={att} />
               ))}
             </div>
           )}
           <div className="mt-2">
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-sm text-gray-600 dark:text-gray-300 shoutout-card-tags">
               Tagged: {(shoutout.recipients || []).map(r => r.name).join(', ') || 'None'}
             </p>
           </div>
         </div>
       </div>
 
-  <div className="flex flex-wrap items-center gap-4 border-t border-gray-200 dark:border-gray-800 pt-4">
+      <div className="flex flex-wrap items-center gap-4 border-t border-gray-200 dark:border-gray-800 pt-4 shoutout-card-footer">
         <div
           className="relative"
           onMouseEnter={openReactionMenu}
@@ -784,7 +808,7 @@ export default function ShoutoutCard({
           </button>
           {reactionMenuOpen && (
             <div
-              className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 flex gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full shadow-lg px-3 py-2 z-10"
+              className="absolute left-1/2 -translate-x-1/2 bottom-full mb-3 flex gap-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-full shadow-lg px-3 py-2 z-10 shoutout-card-reaction-menu"
               onMouseEnter={openReactionMenu}
               onMouseLeave={scheduleReactionMenuClose}
             >
@@ -824,7 +848,7 @@ export default function ShoutoutCard({
       </div>
 
       {reactionDetails.open && (
-        <div className="mt-3 border border-gray-200 dark:border-gray-800 rounded-md p-3 bg-gray-50 dark:bg-gray-800">
+        <div className="mt-3 border border-gray-200 dark:border-gray-800 rounded-md p-3 bg-gray-50 dark:bg-gray-800 shoutout-card-reaction-details">
           <div className="flex items-center justify-between mb-2">
             <div className="text-sm text-gray-700 dark:text-gray-300 font-medium">Reactions</div>
             <button onClick={closeReactionDetails} className="text-xs text-gray-500 hover:text-gray-700">Close</button>
@@ -867,8 +891,8 @@ export default function ShoutoutCard({
       )}
 
       {showComments && (
-        <div className="mt-4 border-t border-gray-200 dark:border-gray-800 pt-4">
-          <div className="space-y-3 mb-4" ref={commentContainerRef}>
+        <div className="mt-4 border-t border-gray-200 dark:border-gray-800 pt-4 shoutout-card-comments-wrapper">
+          <div className="space-y-3 mb-4 shoutout-card-comments" ref={commentContainerRef}>
             {comments.map((comment) => {
               const ownerId = comment?.user?.id ?? comment?.user_id;
               const isCommentOwner = Boolean(user?.id) && ownerId === user.id;
@@ -885,12 +909,12 @@ export default function ShoutoutCard({
               }
               const isHighlightedComment = highlightedCommentId === comment.id;
               return (
-                <div key={comment.id} data-comment-id={comment.id} className="flex space-x-2">
+                <div key={comment.id} data-comment-id={comment.id} className="flex space-x-2 shoutout-card-comment">
                   <div className="flex-shrink-0">
                     <Avatar src={comment.user?.avatar_url} name={comment.user?.name} size="sm" />
                   </div>
                   <div
-                    className={`flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 transition-shadow ${
+                    className={`flex-1 bg-gray-50 dark:bg-gray-800 rounded-lg p-3 transition-shadow shoutout-card-comment-body ${
                       isHighlightedComment ? 'ring-2 ring-blue-400 dark:ring-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg' : ''
                     }`}
                   >
@@ -905,7 +929,7 @@ export default function ShoutoutCard({
                         </p>
                       </div>
                       {user && (
-                        <div data-comment-menu={comment.id} className="relative">
+                        <div data-comment-menu={comment.id} className="relative shoutout-card-comment-menu">
                           <button
                             type="button"
                             onClick={() => setActiveCommentMenu((prev) => (prev === comment.id ? null : comment.id))}
@@ -917,7 +941,7 @@ export default function ShoutoutCard({
                             ⋮
                           </button>
                           {isMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg z-20">
+                            <div className="absolute right-0 mt-2 w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg z-20 shoutout-card-comment-menu-dropdown">
                               {isCommentOwner && (
                                 <>
                                   <button
@@ -1028,54 +1052,58 @@ export default function ShoutoutCard({
         </div>
       )}
 
-      {editModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-          <div className="w-full max-w-lg rounded-lg bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Shout-Out</h3>
-              <button
-                type="button"
-                onClick={closeEditModal}
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                aria-label="Close edit shout-out dialog"
-              >
-                ✕
-              </button>
-            </div>
-            <form onSubmit={handleEditSubmit} className="space-y-4">
-              <textarea
-                rows={5}
-                value={editMessage}
-                onChange={(event) => {
-                  setEditMessage(event.target.value);
-                  if (editError) {
-                    setEditError('');
-                  }
-                }}
-                className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Update your shout-out message"
-              />
-              {editError && <p className="text-sm text-red-600 dark:text-red-400">{editError}</p>}
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={closeEditModal}
-                  className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={editSubmitting}
-                  className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
-                >
-                  {editSubmitting ? 'Saving…' : 'Save changes'}
-                </button>
+      {editModalOpen && portalElement &&
+        createPortal(
+          (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+              <div className="w-full max-w-lg rounded-lg bg-white dark:bg-gray-900 p-6 shadow-xl border border-gray-200 dark:border-gray-800 max-h-[85vh] overflow-y-auto">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Shout-Out</h3>
+                  <button
+                    type="button"
+                    onClick={closeEditModal}
+                    className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    aria-label="Close edit shout-out dialog"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <form onSubmit={handleEditSubmit} className="space-y-4">
+                  <textarea
+                    rows={5}
+                    value={editMessage}
+                    onChange={(event) => {
+                      setEditMessage(event.target.value);
+                      if (editError) {
+                        setEditError('');
+                      }
+                    }}
+                    className="w-full border border-gray-300 dark:border-gray-700 rounded-md px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Update your shout-out message"
+                  />
+                  {editError && <p className="text-sm text-red-600 dark:text-red-400">{editError}</p>}
+                  <div className="flex justify-end gap-3">
+                    <button
+                      type="button"
+                      onClick={closeEditModal}
+                      className="px-4 py-2 rounded-md border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={editSubmitting}
+                      className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      {editSubmitting ? 'Saving…' : 'Save changes'}
+                    </button>
+                  </div>
+                </form>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
+            </div>
+          ),
+          portalElement
+        )}
 
       {deleteModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
@@ -1155,43 +1183,46 @@ export default function ShoutoutCard({
         </div>
       )}
 
-      {reportModal.open && (
-        <ReportModal
-          targetType={reportModal.targetType}
-          context={reportModal.context}
-          reason={reportModal.reason}
-          submitting={reportModal.submitting}
-          submitted={reportModal.submitted}
-          error={reportModal.error}
-          onChange={(v) => setReportModal((s) => ({ ...s, reason: v }))}
-          onClose={() => setReportModal(createInitialReportModalState())}
-          onSubmit={async () => {
-            if (!reportModal.reason.trim()) {
-              setReportModal((s) => ({ ...s, error: 'Please provide a reason.' }));
-              return;
-            }
-            if (!reportModal.targetType || !reportModal.targetId) {
-              setReportModal((s) => ({ ...s, error: 'Unable to determine what to report.' }));
-              return;
-            }
-            try {
-              setReportModal((s) => ({ ...s, submitting: true, error: '' }));
-              const reason = reportModal.reason.trim();
-              if (reportModal.targetType === 'shoutout') {
-                await adminAPI.reportShoutout(reportModal.targetId, reason);
-              } else if (reportModal.targetType === 'comment') {
-                await commentAPI.report(reportModal.targetId, reason);
-              } else {
-                throw new Error('Unsupported report type');
-              }
-              setReportModal((s) => ({ ...s, submitting: false, submitted: true }));
-            } catch (e) {
-              const msg = e?.response?.data?.detail || e?.message || 'Failed to submit report';
-              setReportModal((s) => ({ ...s, submitting: false, error: msg }));
-            }
-          }}
-        />
-      )}
+      {reportModal.open && portalElement
+        ? createPortal(
+            <ReportModal
+              targetType={reportModal.targetType}
+              context={reportModal.context}
+              reason={reportModal.reason}
+              submitting={reportModal.submitting}
+              submitted={reportModal.submitted}
+              error={reportModal.error}
+              onChange={(v) => setReportModal((s) => ({ ...s, reason: v }))}
+              onClose={() => setReportModal(createInitialReportModalState())}
+              onSubmit={async () => {
+                if (!reportModal.reason.trim()) {
+                  setReportModal((s) => ({ ...s, error: 'Please provide a reason.' }));
+                  return;
+                }
+                if (!reportModal.targetType || !reportModal.targetId) {
+                  setReportModal((s) => ({ ...s, error: 'Unable to determine what to report.' }));
+                  return;
+                }
+                try {
+                  setReportModal((s) => ({ ...s, submitting: true, error: '' }));
+                  const reason = reportModal.reason.trim();
+                  if (reportModal.targetType === 'shoutout') {
+                    await adminAPI.reportShoutout(reportModal.targetId, reason);
+                  } else if (reportModal.targetType === 'comment') {
+                    await commentAPI.report(reportModal.targetId, reason);
+                  } else {
+                    throw new Error('Unsupported report type');
+                  }
+                  setReportModal((s) => ({ ...s, submitting: false, submitted: true }));
+                } catch (e) {
+                  const msg = e?.response?.data?.detail || e?.message || 'Failed to submit report';
+                  setReportModal((s) => ({ ...s, submitting: false, error: msg }));
+                }
+              }}
+            />,
+            portalElement
+          )
+        : null}
     </div>
   );
 }
@@ -1296,11 +1327,11 @@ function AttachmentPreview({ attachment }) {
 function ReportModal({ targetType, context, reason, submitting, submitted, error, onChange, onClose, onSubmit }) {
   const title = targetType === 'comment' ? 'Report Comment' : 'Report Shout-Out';
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-white dark:bg-gray-900 rounded-lg shadow-lg w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-4">
+    <div className="report-modal fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 sm:px-6">
+      <div className="report-modal-panel bg-white dark:bg-gray-900 rounded-xl shadow-xl w-full max-w-2xl p-6 sm:p-7">
+        <div className="flex items-center justify-between mb-4 report-modal-header">
           <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{title}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">✕</button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">✕</button>
         </div>
         {submitted ? (
           <div className="space-y-4">
@@ -1312,31 +1343,31 @@ function ReportModal({ targetType, context, reason, submitting, submitted, error
         ) : (
           <>
             {context && (context.preview || context.author) && (
-              <div className="mb-4 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded p-3">
+              <div className="report-modal-context mb-4 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 rounded-lg p-4">
                 {context.author && (
                   <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Author</p>
                 )}
                 {context.author && <p className="text-sm text-gray-700 dark:text-gray-200 mb-2">{context.author}</p>}
-                {/* {context.preview && (
+                {context.preview && (
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400 mb-1">Content</p>
                     <p className="text-sm text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{context.preview}</p>
                   </div>
-                )} */}
+                )}
               </div>
             )}
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Reason</label>
             <textarea
-              rows={4}
+              rows={6}
               value={reason}
               onChange={(e) => onChange(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-700 rounded p-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+              className="report-modal-textarea w-full border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
               placeholder="Describe what's inappropriate or needs review"
             />
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-            <div className="mt-4 flex justify-end space-x-2">
-              <button onClick={onClose} className="px-4 py-2 border rounded text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700">Cancel</button>
-              <button onClick={onSubmit} disabled={submitting} className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">
+            <div className="mt-6 flex justify-end gap-3 report-modal-actions">
+              <button onClick={onClose} className="px-4 py-2 border rounded-md text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800">Cancel</button>
+              <button onClick={onSubmit} disabled={submitting} className="px-4 py-2 rounded-md bg-red-600 text-white shadow hover:bg-red-700 disabled:opacity-50">
                 {submitting ? 'Submitting…' : 'Submit Report'}
               </button>
             </div>

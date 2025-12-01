@@ -3,6 +3,7 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { notificationsAPI } from '../../services/api';
 import Avatar from './Avatar';
+import '../../App.css';
  
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -211,22 +212,22 @@ export default function Navbar() {
       setNotificationsLoading(false);
     }
   };
-  const navClasses = `sticky top-0 z-50 theme-transition backdrop-blur-md border-b transition-[background-color,backdrop-filter,border-color,transform,opacity] duration-300 ${
+  const navClasses = `navbar sticky top-0 z-50 theme-transition backdrop-blur-md border-b transition-[background-color,backdrop-filter,border-color,transform,opacity] duration-300 ${
     scrolled
       ? 'bg-white/70 dark:bg-gray-900/60 border-gray-200/20 dark:border-gray-800/60 shadow-sm'
       : 'bg-white/40 dark:bg-gray-900/40 border-transparent'
-  } ${mounted ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'}`;
+  } ${mounted ? 'navbar-mounted translate-y-0 opacity-100' : 'navbar-initial -translate-y-2 opacity-0'}`;
  
   return (
     <nav className={navClasses}>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 navbar-inner">
+        <div className="flex h-16 items-center justify-between gap-3 navbar-row">
+          <div className="flex items-center gap-3 navbar-left">
             <button
               type="button"
               data-mobile-menu-toggle
               onClick={() => setMobileMenuOpen((open) => !open)}
-              className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-300 dark:hover:text-blue-300 dark:hover:bg-gray-800 md:hidden"
+              className="inline-flex items-center justify-center rounded-md p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:text-gray-300 dark:hover:text-blue-300 dark:hover:bg-gray-800 md:hidden navbar-toggle"
               aria-expanded={mobileMenuOpen}
               aria-controls="mobile-nav"
               aria-label="Toggle navigation menu"
@@ -244,17 +245,17 @@ export default function Navbar() {
                 </svg>
               )}
             </button>
-            <Link to="/" className="text-2xl font-bold text-blue-600 dark:text-blue-400">
+            <Link to="/" className="text-2xl font-bold text-blue-600 dark:text-blue-400 navbar-brand">
               Brag Board
             </Link>
           </div>
-          <div className="hidden md:flex items-center gap-4">
+          <div className="hidden md:flex items-center gap-4 navbar-desktop">
             {user && (
               <div className="relative" ref={notificationsRef}>
                 <button
                   type="button"
                   onClick={handleNotificationsToggle}
-                  className="relative rounded-full p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 transition dark:text-gray-300 dark:hover:text-blue-300 dark:hover:bg-gray-800"
+                  className="relative rounded-full p-2 text-gray-600 hover:text-blue-600 hover:bg-gray-100 transition dark:text-gray-300 dark:hover:text-blue-300 dark:hover:bg-gray-800 navbar-notify"
                   aria-label="Open notifications"
                 >
                   <svg
@@ -287,8 +288,8 @@ export default function Navbar() {
                   )}
                 </button>
                 {notificationsOpen && (
-                  <div className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900 z-50">
-                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <div className="absolute right-0 mt-2 w-80 max-w-[90vw] rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900 z-50 navbar-dropdown">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700 navbar-dropdown-header">
                       <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Notifications</span>
                       <div className="flex items-center gap-3">
                         {notificationsLoading && (
@@ -304,7 +305,7 @@ export default function Navbar() {
                         </button>
                       </div>
                     </div>
-                    <div className="max-h-80 overflow-y-auto">
+                    <div className="max-h-80 overflow-y-auto navbar-dropdown-list">
                       {notificationsLoading && !notifications.length ? (
                         <div className="px-4 py-6 text-sm text-gray-500 dark:text-gray-400">Loading notifications...</div>
                       ) : notifications.length === 0 ? (
@@ -318,7 +319,7 @@ export default function Navbar() {
                               type="button"
                               key={notification.id}
                               onClick={() => handleNotificationClick(notification)}
-                              className={`flex w-full items-start gap-3 px-4 py-3 text-left transition ${
+                              className={`flex w-full items-start gap-3 px-4 py-3 text-left transition navbar-notification ${
                                 isUnread
                                   ? 'bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30'
                                   : 'hover:bg-gray-100 dark:hover:bg-gray-800'
@@ -361,7 +362,7 @@ export default function Navbar() {
             )}
             <Link
               to="/feed"
-              className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-blue-600 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-blue-300"
+              className="px-3 py-2 rounded-md text-sm font-medium text-gray-700 transition hover:bg-gray-100 hover:text-blue-600 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-blue-300 navbar-link"
             >
               Feed
             </Link>
@@ -370,7 +371,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => setMenuOpen((open) => !open)}
-                  className="flex items-center gap-2 rounded-full border border-transparent px-2 py-1 transition hover:border-gray-300 dark:hover:border-gray-700"
+                  className="flex items-center gap-2 rounded-full border border-transparent px-2 py-1 transition hover:border-gray-300 dark:hover:border-gray-700 navbar-profile-trigger"
                 >
                   <Avatar src={user.avatar_url} name={user.name} size="sm" />
                   <div className="hidden sm:flex flex-col items-start leading-tight">
@@ -381,8 +382,8 @@ export default function Navbar() {
                   </div>
                 </button>
                 {menuOpen && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900 z-50">
-                    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                  <div className="absolute right-0 mt-2 w-48 rounded-md border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900 z-50 navbar-profile-menu">
+                    <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 navbar-profile-menu-header">
                       <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{user.name}</p>
                       {user.department ? (
                         <p className="text-xs text-gray-500 dark:text-gray-400">{user.department}</p>
@@ -393,7 +394,7 @@ export default function Navbar() {
                       <button
                         type="button"
                         onClick={() => { setMenuOpen(false); navigate('/admin'); }}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 navbar-profile-item"
                       >
                         Dashboard
                       </button>
@@ -401,28 +402,28 @@ export default function Navbar() {
                     <button
                       type="button"
                       onClick={() => { setMenuOpen(false); navigate('/profile'); }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 navbar-profile-item"
                     >
                       View Profile
                     </button>
                     <button
                       type="button"
                       onClick={() => { setMenuOpen(false); navigate('/my-shoutouts'); }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 navbar-profile-item"
                     >
                       My Shout-Outs
                     </button>
                     <button
                       type="button"
                       onClick={() => { setMenuOpen(false); navigate('/shoutouts-for-me'); }}
-                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800"
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 transition hover:bg-gray-100 dark:text-gray-200 dark:hover:bg-gray-800 navbar-profile-item"
                     >
                       Tagged For Me
                     </button>
                     <button
                       type="button"
                       onClick={() => { setMenuOpen(false); handleLogout(); }}
-                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 navbar-profile-item navbar-profile-item--danger"
                     >
                       Logout
                     </button>
@@ -430,16 +431,16 @@ export default function Navbar() {
                 )}
               </div>
             ) : (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 navbar-auth">
                 <Link
                   to="/login"
-                  className="text-sm font-medium text-gray-700 transition hover:text-blue-600 dark:text-gray-200 dark:hover:text-blue-300"
+                  className="text-sm font-medium text-gray-700 transition hover:text-blue-600 dark:text-gray-200 dark:hover:text-blue-300 navbar-auth-link"
                 >
                   Login
                 </Link>
                 <Link
                   to="/register"
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow hover:bg-blue-700"
+                  className="rounded-md bg-blue-600 px-3 py-1.5 text-sm font-semibold text-white shadow hover:bg-blue-700 navbar-auth-cta"
                 >
                   Sign up
                 </Link>
@@ -451,11 +452,11 @@ export default function Navbar() {
       {mobileMenuOpen && (
         <div
           id="mobile-nav"
-          className="md:hidden border-t border-gray-200 bg-white/95 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-950/95"
+          className="md:hidden border-t border-gray-200 bg-white/95 backdrop-blur-sm dark:border-gray-800 dark:bg-gray-950/95 navbar-mobile"
         >
-          <div ref={mobileMenuRef} className="max-w-7xl mx-auto px-4 py-4 space-y-6">
+          <div ref={mobileMenuRef} className="max-w-7xl mx-auto px-4 py-4 space-y-6 navbar-mobile-shell">
             {user ? (
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 navbar-mobile-profile">
                 <Avatar src={user.avatar_url} name={user.name} size="md" />
                 <div className="flex-1">
                   <p className="text-sm font-semibold text-gray-800 dark:text-gray-100">{user.name}</p>
@@ -466,7 +467,7 @@ export default function Navbar() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 navbar-mobile-auth">
                 <Link
                   to="/login"
                   onClick={() => setMobileMenuOpen(false)}
@@ -483,11 +484,11 @@ export default function Navbar() {
                 </Link>
               </div>
             )}
-            <div className="space-y-2">
+            <div className="space-y-2 navbar-mobile-links">
               <button
                 type="button"
                 onClick={() => handleMobileNavigate('/feed')}
-                className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 navbar-mobile-link"
               >
                 Feed
                 <span className="text-xs text-gray-400">Main</span>
@@ -496,7 +497,7 @@ export default function Navbar() {
                 <button
                   type="button"
                   onClick={() => handleMobileNavigate('/admin')}
-                  className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                  className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 navbar-mobile-link"
                 >
                   Dashboard
                   <span className="text-xs text-blue-500">Admin</span>
@@ -507,21 +508,21 @@ export default function Navbar() {
                   <button
                     type="button"
                     onClick={() => handleMobileNavigate('/profile')}
-                    className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                    className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 navbar-mobile-link"
                   >
                     View Profile
                   </button>
                   <button
                     type="button"
                     onClick={() => handleMobileNavigate('/my-shoutouts')}
-                    className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                    className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 navbar-mobile-link"
                   >
                     My Shout-Outs
                   </button>
                   <button
                     type="button"
                     onClick={() => handleMobileNavigate('/shoutouts-for-me')}
-                    className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                    className="flex w-full items-center justify-between rounded-md border border-gray-200 px-4 py-2 text-left text-sm font-medium text-gray-700 transition hover:bg-gray-100 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800 navbar-mobile-link"
                   >
                     Tagged For Me
                   </button>
@@ -541,7 +542,7 @@ export default function Navbar() {
                     Clear all
                   </button>
                 </div>
-                <div className="max-h-64 space-y-2 overflow-y-auto">
+                <div className="max-h-64 space-y-2 overflow-y-auto navbar-mobile-notifications">
                   {notificationsLoading && !notifications.length ? (
                     <div className="rounded-md border border-dashed border-gray-300 px-3 py-4 text-center text-sm text-gray-500 dark:border-gray-700 dark:text-gray-400">
                       Loading notifications...
@@ -588,7 +589,7 @@ export default function Navbar() {
               <button
                 type="button"
                 onClick={() => handleLogout()}
-                className="flex w-full items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-red-700"
+                className="flex w-full items-center justify-center rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-red-700 navbar-mobile-logout"
               >
                 Logout
               </button>

@@ -42,6 +42,7 @@ export default function Admin() {
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
   const [exporting, setExporting] = useState(null);
+  const [isMounted, setIsMounted] = useState(false);
   const roleSectionRef = useRef(null);
   const departmentSectionRef = useRef(null);
   const shoutoutReportsRef = useRef(null);
@@ -127,6 +128,15 @@ export default function Admin() {
       setCommentReportLoading(false);
     }
   }, [commentReportFilter]);
+
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsMounted(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsMounted(true), 16);
+    return () => clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -438,20 +448,20 @@ export default function Admin() {
 
   return (
     <>
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 py-8">
-      <div className="max-w-7xl mx-auto px-4">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">Admin Dashboard</h1>
+    <div className={`min-h-screen bg-gray-50 dark:bg-gray-950 py-8 admin-page ${isMounted ? 'is-mounted' : ''}`}>
+      <div className="max-w-7xl mx-auto px-4 page-container admin-shell">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8 admin-title">Admin Dashboard</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 admin-metric-grid">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow admin-metric-card">
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Users</h3>
             <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{analytics?.total_users || 0}</p>
           </div>
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow admin-metric-card">
             <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Shout-Outs</h3>
             <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">{analytics?.total_shoutouts || 0}</p>
           </div>
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow md:col-span-2 lg:col-span-2">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow md:col-span-2 lg:col-span-2 admin-metric-card admin-metric-card--wide">
             <h5 className="text-x font-bold text-gray-900 dark:text-gray-100">Data Exports</h5>
             {/* <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Download admin logs and reported items as CSV or PDF. Apply an optional date range before exporting.</p> */}
             <div className="flex flex-wrap items-end gap-3 mt-4">
@@ -493,7 +503,7 @@ export default function Admin() {
                   type="button"
                   onClick={() => handleExportDownload('logs')}
                   disabled={exporting === 'logs'}
-                  className={`px-4 py-2 rounded text-white text-sm ${exporting === 'logs' ? 'bg-blue-500/70 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
+                  className={`px-4 py-2 rounded text-white text-sm admin-action-button ${exporting === 'logs' ? 'bg-blue-500/70 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'}`}
                 >
                   {exporting === 'logs' ? 'Preparing...' : 'Admin Logs'}
                 </button>
@@ -504,7 +514,7 @@ export default function Admin() {
                 type="button"
                 onClick={() => handleExportDownload('shoutoutReports')}
                 disabled={exporting === 'shoutoutReports'}
-                className={`px-4 py-2 rounded text-white text-sm ${exporting === 'shoutoutReports' ? 'bg-indigo-500/70 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                className={`px-4 py-2 rounded text-white text-sm admin-action-button ${exporting === 'shoutoutReports' ? 'bg-indigo-500/70 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700'}`}
               >
                 {exporting === 'shoutoutReports' ? 'Preparing...' : 'Shout-out Reports'}
               </button>
@@ -512,15 +522,15 @@ export default function Admin() {
                 type="button"
                 onClick={() => handleExportDownload('commentReports')}
                 disabled={exporting === 'commentReports'}
-                className={`px-4 py-2 rounded text-white text-sm ${exporting === 'commentReports' ? 'bg-purple-500/70 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
+                className={`px-4 py-2 rounded text-white text-sm admin-action-button ${exporting === 'commentReports' ? 'bg-purple-500/70 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
               >
                 {exporting === 'commentReports' ? 'Preparing...' : 'Comment Reports'}
               </button>
             </div>
           </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 admin-overview-grid">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow admin-section">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Top Contributors</h2>
             <div className="space-y-3">
               {analytics?.top_contributors?.map((user, index) => (
@@ -537,7 +547,7 @@ export default function Admin() {
             </div>
           </div>
 
-          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow admin-section">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Most Recognized</h2>
             <div className="space-y-3">
               {analytics?.most_tagged?.map((user, index) => (
@@ -555,7 +565,7 @@ export default function Admin() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
+        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow admin-section">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Department Stats</h2>
           <DepartmentStatsChart data={analytics?.department_stats} />
         </div>
@@ -563,7 +573,7 @@ export default function Admin() {
         {roleRequestsSupported && (
         <div
           ref={roleSectionRef}
-          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'role-requests' ? 'ring-2 ring-blue-500' : ''}`}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 admin-section ${highlightedSection === 'role-requests' ? 'ring-2 ring-blue-500' : ''}`}
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Role Change Requests</h2>
@@ -588,8 +598,8 @@ export default function Admin() {
           ) : roleRequests.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">No role change requests for this filter.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+            <div className="overflow-x-auto admin-table-wrapper">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 admin-table">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
@@ -669,7 +679,7 @@ export default function Admin() {
 
         <div
           ref={departmentSectionRef}
-          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'department-requests' ? 'ring-2 ring-blue-500' : ''}`}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 admin-section ${highlightedSection === 'department-requests' ? 'ring-2 ring-blue-500' : ''}`}
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Department Change Requests</h2>
@@ -694,8 +704,8 @@ export default function Admin() {
           ) : departmentRequests.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">No requests for this filter.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+            <div className="overflow-x-auto admin-table-wrapper">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 admin-table">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
@@ -773,7 +783,7 @@ export default function Admin() {
         </div>
         <div
           ref={shoutoutReportsRef}
-          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'shoutout-reports' ? 'ring-2 ring-blue-500' : ''}`}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 admin-section ${highlightedSection === 'shoutout-reports' ? 'ring-2 ring-blue-500' : ''}`}
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Reported Shout-Outs</h2>
@@ -797,8 +807,8 @@ export default function Admin() {
           ) : shoutoutReports.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">No reports for this filter.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+            <div className="overflow-x-auto admin-table-wrapper">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 admin-table">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
@@ -871,7 +881,7 @@ export default function Admin() {
         </div>
         <div
           ref={commentReportsRef}
-          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'comment-reports' ? 'ring-2 ring-blue-500' : ''}`}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 admin-section ${highlightedSection === 'comment-reports' ? 'ring-2 ring-blue-500' : ''}`}
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Reported Comments</h2>
@@ -895,8 +905,8 @@ export default function Admin() {
           ) : commentReports.length === 0 ? (
             <p className="text-gray-500 dark:text-gray-400">No comment reports for this filter.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+            <div className="overflow-x-auto admin-table-wrapper">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800 admin-table">
                 <thead className="bg-gray-50 dark:bg-gray-800">
                   <tr>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>

@@ -3,11 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { shoutoutAPI, reactionAPI, commentAPI } from '../services/api';
 import ShoutoutCard from '../components/shoutouts/ShoutoutCard';
 import ErrorBoundary from '../components/common/ErrorBoundary';
+import '../App.css';
 
 export default function TaggedShoutouts() {
   const { user } = useAuth();
   const [shoutouts, setShoutouts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMounted, setIsMounted] = useState(false);
 
   const fetchShoutouts = useCallback(async (options = {}) => {
     const opts = (options && typeof options === 'object') ? options : {};
@@ -32,6 +34,15 @@ export default function TaggedShoutouts() {
   useEffect(() => {
     fetchShoutouts();
   }, [fetchShoutouts]);
+
+  useEffect(() => {
+    if (typeof requestAnimationFrame === 'function') {
+      const frame = requestAnimationFrame(() => setIsMounted(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    const timeout = setTimeout(() => setIsMounted(true), 16);
+    return () => clearTimeout(timeout);
+  }, []);
 
   const handleReaction = async (shoutoutId, reactionType, isAdding, replacedTypes = []) => {
     const previousState = shoutouts.map((item) => ({
@@ -110,24 +121,27 @@ export default function TaggedShoutouts() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition" key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}>
-      <div className="max-w-2xl mx-auto py-8 px-4 page-container">
-        <div className="mb-6">
+    <div
+      className={`min-h-screen bg-gray-50 dark:bg-gray-950 theme-transition feed-page tagged-page ${isMounted ? 'is-mounted' : ''}`}
+      key={(document?.documentElement?.classList.contains('dark') ? 'dark' : 'light')}
+    >
+      <div className="max-w-2xl mx-auto py-8 px-4 page-container feed-shell">
+        <div className="mb-6 tagged-header">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Shout-Outs For Me</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400">Every shout-out where teammates tagged you.</p>
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center py-20">
+          <div className="flex justify-center items-center py-20 tagged-state">
             <div className="text-lg text-gray-600 dark:text-gray-300">Loading shout-outs…</div>
           </div>
         ) : shoutouts.length === 0 ? (
-          <div className="text-center py-12">
+          <div className="text-center py-12 tagged-state">
             <p className="text-gray-500 dark:text-gray-400">No shout-outs yet. Keep doing great work!</p>
           </div>
         ) : (
           <ErrorBoundary>
-            <div className="space-y-4">
+            <div className="space-y-4 feed-list tagged-list">
               {shoutouts.map((shoutout) => (
                 <ShoutoutCard
                   key={shoutout.id}
