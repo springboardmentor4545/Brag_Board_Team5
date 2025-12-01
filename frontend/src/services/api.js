@@ -140,6 +140,8 @@ export const adminAPI = {
   deleteComment: (commentId, config = {}) => api.delete(`/shoutouts/comments/${commentId}`, config),
   getDepartmentChangeRequests: (status) => api.get('/admin/department-change-requests', { params: { status } }),
   decideDepartmentChangeRequest: (requestId, action, config = {}) => api.post(`/admin/department-change-requests/${requestId}/decision`, { action }, config),
+  getRoleChangeRequests: (status) => api.get('/admin/role-change-requests', { params: { status } }),
+  decideRoleChangeRequest: (requestId, action, config = {}) => api.post(`/admin/role-change-requests/${requestId}/decision`, { action }, config),
   getCommentReports: (status) => api.get('/admin/comment-reports', { params: status ? { status } : undefined }),
   resolveCommentReport: (reportId, action, config = {}) => api.post(`/admin/comment-reports/${reportId}/resolve`, { action }, config),
   downloadAdminLogs: (params, config = {}) => api.get('/admin/exports/logs', {

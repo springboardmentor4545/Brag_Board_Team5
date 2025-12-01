@@ -4,11 +4,13 @@ from typing import List
 from app.database import get_db
 from app.models.user import User
 from app.models.department_change import DepartmentChangeRequest
+from app.models.role_change import RoleChangeRequest
 from app.schemas.user import User as UserSchema, UserUpdate
 from app.middleware.auth import get_current_active_user
 import os
 import secrets
 from app.schemas.department_change import DepartmentChangeRequest as DepartmentChangeSchema
+from app.schemas.role_change import RoleChangeRequest as RoleChangeSchema
 from app.utils.notifications import notify_admins
 
 AVATAR_DIR = os.path.join(os.getcwd(), "uploads", "avatars")
@@ -21,13 +23,20 @@ async def get_current_user_profile(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    pending = (
+    pending_department = (
         db.query(DepartmentChangeRequest)
         .filter(DepartmentChangeRequest.user_id == current_user.id, DepartmentChangeRequest.status == "pending")
         .order_by(DepartmentChangeRequest.created_at.desc())
         .first()
     )
-    setattr(current_user, "pending_department", pending.requested_department if pending else None)
+    pending_role = (
+        db.query(RoleChangeRequest)
+        .filter(RoleChangeRequest.user_id == current_user.id, RoleChangeRequest.status == "pending")
+        .order_by(RoleChangeRequest.created_at.desc())
+        .first()
+    )
+    setattr(current_user, "pending_department", pending_department.requested_department if pending_department else None)
+    setattr(current_user, "pending_role", pending_role.requested_role if pending_role else None)
     return current_user
 
 @router.put("/me", response_model=UserSchema)
@@ -36,10 +45,17 @@ async def update_current_user(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    pending_request = (
+    pending_department_request = (
         db.query(DepartmentChangeRequest)
         .filter(DepartmentChangeRequest.user_id == current_user.id, DepartmentChangeRequest.status == "pending")
         .order_by(DepartmentChangeRequest.created_at.desc())
+        .first()
+    )
+
+    pending_role_request = (
+        db.query(RoleChangeRequest)
+        .filter(RoleChangeRequest.user_id == current_user.id, RoleChangeRequest.status == "pending")
+        .order_by(RoleChangeRequest.created_at.desc())
         .first()
     )
 
@@ -52,43 +68,100 @@ async def update_current_user(
         changed = True
 
     new_pending_department = None
-    should_notify_admins = False
+    new_pending_role = None
+    should_notify_department_admins = False
+    should_notify_role_admins = False
     if user_update.department is not None:
         if not user_update.department or not user_update.department.strip():
             raise HTTPException(status_code=400, detail="Department cannot be empty")
         if user_update.department != current_user.department:
-            if pending_request:
-                if pending_request.requested_department != user_update.department:
-                    pending_request.requested_department = user_update.department
+            if pending_department_request:
+                if pending_department_request.requested_department != user_update.department:
+                    pending_department_request.requested_department = user_update.department
                     changed = True
-                    should_notify_admins = True
+                    should_notify_department_admins = True
             else:
-                pending_request = DepartmentChangeRequest(
+                pending_department_request = DepartmentChangeRequest(
                     user_id=current_user.id,
                     current_department=current_user.department,
                     requested_department=user_update.department,
                     status="pending"
                 )
-                db.add(pending_request)
+                db.add(pending_department_request)
                 changed = True
-                should_notify_admins = True
-            new_pending_department = pending_request.requested_department if pending_request else user_update.department
+                should_notify_department_admins = True
+            new_pending_department = (
+                pending_department_request.requested_department
+                if pending_department_request else user_update.department
+            )
+
+    if user_update.role is not None:
+        target_role = user_update.role.strip().lower()
+        if target_role not in {"admin", "employee"}:
+            raise HTTPException(status_code=400, detail="Invalid role selection")
+
+        if target_role == "admin" and (current_user.department or "").strip().lower() != "hr":
+            raise HTTPException(status_code=403, detail="Only HR members can request admin access")
+
+        if target_role != (current_user.role or "").lower():
+            if pending_role_request:
+                if pending_role_request.requested_role != target_role:
+                    pending_role_request.requested_role = target_role
+                    pending_role_request.current_role = current_user.role
+                    pending_role_request.status = "pending"
+                    changed = True
+                    should_notify_role_admins = True
+            else:
+                pending_role_request = RoleChangeRequest(
+                    user_id=current_user.id,
+                    current_role=current_user.role,
+                    requested_role=target_role,
+                    status="pending"
+                )
+                db.add(pending_role_request)
+                changed = True
+                should_notify_role_admins = True
+            new_pending_role = target_role
+        elif pending_role_request:
+            # If there is an existing pending request but user selected their current role,
+            # keep exposing the pending value so the UI can reflect it.
+            new_pending_role = pending_role_request.requested_role
 
     if changed:
-        if should_notify_admins and pending_request:
-            db.flush()
+        db.flush()
+        if should_notify_department_admins and pending_department_request:
             notify_admins(
                 db,
                 event_type="department_change.requested",
                 title="New department change request",
-                message=f"{current_user.name or 'An employee'} requested a move to {pending_request.requested_department}.",
+                message=(
+                    f"{current_user.name or 'An employee'} requested a move to {pending_department_request.requested_department}."
+                ),
                 actor_id=current_user.id,
                 reference_type="department_change_request",
-                reference_id=pending_request.id,
+                reference_id=pending_department_request.id,
                 payload={
                     "redirect_url": "/admin?section=department-requests",
                     "section": "department-requests",
-                    "request_id": pending_request.id,
+                    "request_id": pending_department_request.id,
+                    "user_id": current_user.id,
+                },
+            )
+        if should_notify_role_admins and pending_role_request:
+            notify_admins(
+                db,
+                event_type="role_change.requested",
+                title="New role change request",
+                message=(
+                    f"{current_user.name or 'An employee'} requested the '{pending_role_request.requested_role}' role."
+                ),
+                actor_id=current_user.id,
+                reference_type="role_change_request",
+                reference_id=pending_role_request.id,
+                payload={
+                    "redirect_url": "/admin?section=role-requests",
+                    "section": "role-requests",
+                    "request_id": pending_role_request.id,
                     "user_id": current_user.id,
                 },
             )
@@ -96,10 +169,14 @@ async def update_current_user(
 
     db.refresh(current_user)
 
-    if pending_request and pending_request.status == "pending":
-        new_pending_department = pending_request.requested_department
+    if pending_department_request and pending_department_request.status == "pending":
+        new_pending_department = pending_department_request.requested_department
+
+    if pending_role_request and pending_role_request.status == "pending":
+        new_pending_role = pending_role_request.requested_role
 
     setattr(current_user, "pending_department", new_pending_department)
+    setattr(current_user, "pending_role", new_pending_role)
     return current_user
 
 
@@ -112,6 +189,20 @@ async def list_my_department_requests(
         db.query(DepartmentChangeRequest)
         .filter(DepartmentChangeRequest.user_id == current_user.id)
         .order_by(DepartmentChangeRequest.created_at.desc())
+        .all()
+    )
+    return requests
+
+
+@router.get("/me/role-change-requests", response_model=List[RoleChangeSchema])
+async def list_my_role_requests(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    requests = (
+        db.query(RoleChangeRequest)
+        .filter(RoleChangeRequest.user_id == current_user.id)
+        .order_by(RoleChangeRequest.created_at.desc())
         .all()
     )
     return requests

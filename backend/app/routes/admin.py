@@ -19,9 +19,14 @@ from app.schemas.comment_report import CommentReport as CommentReportSchema
 from app.schemas.user import User as UserSchema
 from app.middleware.auth import get_current_active_user, require_admin
 from app.models.department_change import DepartmentChangeRequest
+from app.models.role_change import RoleChangeRequest
 from app.schemas.department_change import (
     DepartmentChangeRequest as DepartmentChangeSchema,
     DepartmentChangeDecision,
+)
+from app.schemas.role_change import (
+    RoleChangeRequest as RoleChangeSchema,
+    RoleChangeDecision,
 )
 from app.utils.notifications import create_notification, notify_admins
 from app.utils.responses import success_response
@@ -657,6 +662,109 @@ async def decide_department_change_request(
             "redirect_url": "/profile",
             "department": request.requested_department,
             "status": action,
+        },
+    )
+
+    db.commit()
+    db.refresh(request)
+
+    return request
+
+
+@router.get("/role-change-requests", response_model=List[RoleChangeSchema])
+async def list_role_change_requests(
+    status: Optional[str] = None,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    query = db.query(RoleChangeRequest).options(
+        joinedload(RoleChangeRequest.user),
+        joinedload(RoleChangeRequest.admin),
+    ).order_by(RoleChangeRequest.created_at.desc())
+
+    if status:
+        query = query.filter(RoleChangeRequest.status == status)
+
+    return query.all()
+
+
+@router.post("/role-change-requests/{request_id}/decision", response_model=RoleChangeSchema)
+async def decide_role_change_request(
+    request_id: int,
+    payload: RoleChangeDecision,
+    admin: User = Depends(require_admin),
+    db: Session = Depends(get_db)
+):
+    request = (
+        db.query(RoleChangeRequest)
+        .options(
+            joinedload(RoleChangeRequest.user),
+            joinedload(RoleChangeRequest.admin),
+        )
+        .filter(RoleChangeRequest.id == request_id)
+        .first()
+    )
+    if not request:
+        raise HTTPException(status_code=404, detail="Role change request not found")
+
+    if request.status != "pending":
+        raise HTTPException(status_code=400, detail="Request already processed")
+
+    action = payload.action.lower()
+    if action not in {"approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="Invalid action")
+
+    target_role = (request.requested_role or "").lower()
+    if action == "approved" and target_role not in {"admin", "employee"}:
+        raise HTTPException(status_code=400, detail="Invalid requested role")
+
+    request.status = action
+    request.admin_id = admin.id
+    request.admin = admin
+    request.resolved_at = datetime.now(timezone.utc)
+
+    admin_action = f"Role change request #{request_id} {action}"
+
+    user = db.query(User).filter(User.id == request.user_id).first()
+    if action == "approved" and user:
+        user.role = target_role
+        user.is_admin = target_role == "admin"
+        admin_action += f"; role set to {target_role}"
+        request.user = user
+
+    db.add(AdminLog(
+        admin_id=admin.id,
+        action=admin_action,
+        target_id=request_id,
+        target_type="role_change_request"
+    ))
+
+    if action == "approved":
+        requested_role_label = request.requested_role or "employee"
+        decision_title = "Role change approved"
+        decision_message = (
+            "Your request to become an admin was approved."
+            if requested_role_label == "admin"
+            else "Your request to switch to the employee role was approved."
+        )
+    else:
+        decision_title = "Role change rejected"
+        decision_message = "Your role change request was rejected by the administrator."
+
+    create_notification(
+        db,
+        user_id=request.user_id,
+        actor_id=admin.id,
+        event_type="role_change.decision",
+        title=decision_title,
+        message=decision_message,
+        reference_type="role_change_request",
+        reference_id=request.id,
+        payload={
+            "redirect_url": "/profile",
+            "role": request.requested_role,
+            "status": action,
+            "granted_admin": action == "approved" and (request.requested_role == "admin"),
         },
     )
 

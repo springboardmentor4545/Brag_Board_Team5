@@ -5,20 +5,26 @@ import Avatar from '../components/common/Avatar';
 
 export default function Profile() {
   const { user, setUser } = useAuth();
-  const departmentRequestSuccessMessage = 'Request has been sent to the Admin successfully!';
+  const requestSubmissionMessage = 'Request has been sent to the Admin successfully!';
   const [name, setName] = useState('');
   const [department, setDepartment] = useState('');
+  const [roleSelection, setRoleSelection] = useState('employee');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState('');
   const [error, setError] = useState('');
   const [avatarPreview, setAvatarPreview] = useState('');
   const [avatarFile, setAvatarFile] = useState(null);
   const avatarObjectUrlRef = useRef(null);
+  const isUserHr = (user?.department || '').toLowerCase() === 'hr';
+  const canRequestRoleChange = isUserHr || user?.role === 'admin';
+  const showRoleSelector = canRequestRoleChange;
 
   useEffect(() => {
     if (user) {
       setName(user.name || '');
       setDepartment(user.department || '');
+      const roleValue = (user.pending_role || user.role || 'employee')?.toLowerCase();
+      setRoleSelection(roleValue === 'admin' ? 'admin' : 'employee');
       setAvatarPreview(user.avatar_url || '');
       if (avatarObjectUrlRef.current) {
         URL.revokeObjectURL(avatarObjectUrlRef.current);
@@ -89,10 +95,23 @@ export default function Profile() {
 
     try {
       const originalDepartment = user?.department || '';
+      const currentRole = (user?.role || 'employee').toLowerCase();
+      const pendingRole = (user?.pending_role || '').toLowerCase();
+      const selectedRole = (roleSelection || '').toLowerCase();
       const departmentChanged = user?.role !== 'admin' && trimmedDepartment && trimmedDepartment !== originalDepartment;
-      const payload = user?.role === 'admin'
-        ? { name: trimmedName }
-        : { name: trimmedName, department: trimmedDepartment };
+      const roleChanged = canRequestRoleChange
+        && selectedRole
+        && selectedRole !== currentRole
+        && selectedRole !== pendingRole;
+
+      const payload = { name: trimmedName };
+      if (user?.role !== 'admin') {
+        payload.department = trimmedDepartment;
+      }
+      if (roleChanged) {
+        payload.role = selectedRole;
+      }
+
       const response = await userAPI.updateMe(payload);
       let updatedUser = response.data;
 
@@ -108,7 +127,10 @@ export default function Profile() {
 
       setUser(updatedUser);
       setAvatarPreview(updatedUser.avatar_url || '');
-      setSuccess(departmentChanged ? departmentRequestSuccessMessage : 'Profile updated successfully!');
+      const updatedRoleValue = (updatedUser.pending_role || updatedUser.role || 'employee')?.toLowerCase();
+      setRoleSelection(updatedRoleValue === 'admin' ? 'admin' : 'employee');
+      const requestTriggered = departmentChanged || roleChanged;
+      setSuccess(requestTriggered ? requestSubmissionMessage : 'Profile updated successfully!');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to update profile');
     } finally {
@@ -116,8 +138,8 @@ export default function Profile() {
     }
   };
 
-  const successIsDepartmentRequest = success === departmentRequestSuccessMessage;
-  const successAlertClasses = successIsDepartmentRequest
+  const successIsRequest = success === requestSubmissionMessage;
+  const successAlertClasses = successIsRequest
     ? 'bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-400 dark:border-yellow-600 text-yellow-800 dark:text-yellow-200'
     : 'bg-green-100 dark:bg-green-900/40 border border-green-400 dark:border-green-600 text-green-700 dark:text-green-300';
 
@@ -207,6 +229,25 @@ export default function Profile() {
                 </select>
               </div>
             {/* )} */}
+            {showRoleSelector && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
+                <select
+                  value={roleSelection}
+                  onChange={(e) => setRoleSelection(e.target.value)}
+                  disabled={loading}
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                >
+                  <option value="employee">Employee (default)</option>
+                  <option value="admin">Admin</option>
+                </select>
+                {user?.pending_role && (
+                  <p className="mt-2 text-xs text-yellow-600 dark:text-yellow-400">
+                    Pending approval: {user.pending_role === 'admin' ? 'Admin access' : 'Employee access'}
+                  </p>
+                )}
+              </div>
+            )}
             <div>
               <button
                 type="submit"

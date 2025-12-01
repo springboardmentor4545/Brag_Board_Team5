@@ -16,6 +16,7 @@ class UserUpdate(BaseModel):
     name: Optional[str] = None
     department: Optional[str] = None
     avatar_url: Optional[str] = None
+    role: Optional[str] = None
 
 class User(UserBase):
     id: int
@@ -26,6 +27,7 @@ class User(UserBase):
     email_verified: bool
     company_verified: bool
     pending_department: Optional[str] = None
+    pending_role: Optional[str] = None
 
     class Config:
         from_attributes = True

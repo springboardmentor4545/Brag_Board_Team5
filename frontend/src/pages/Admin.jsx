@@ -18,6 +18,10 @@ export default function Admin() {
   const [requestFilter, setRequestFilter] = useState('pending');
   const [requestLoading, setRequestLoading] = useState(false);
   const [processingRequestId, setProcessingRequestId] = useState(null);
+  const [roleRequests, setRoleRequests] = useState([]);
+  const [roleRequestFilter, setRoleRequestFilter] = useState('pending');
+  const [roleRequestLoading, setRoleRequestLoading] = useState(false);
+  const [processingRoleRequestId, setProcessingRoleRequestId] = useState(null);
   const [shoutoutReportFilter, setShoutoutReportFilter] = useState('pending');
   const [shoutoutReportLoading, setShoutoutReportLoading] = useState(false);
   const [resolvingShoutoutReportId, setResolvingShoutoutReportId] = useState(null);
@@ -37,10 +41,16 @@ export default function Admin() {
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
   const [exporting, setExporting] = useState(null);
+  const roleSectionRef = useRef(null);
   const departmentSectionRef = useRef(null);
   const shoutoutReportsRef = useRef(null);
   const commentReportsRef = useRef(null);
   const [highlightedSection, setHighlightedSection] = useState(null);
+  const formatRoleLabel = (value) => {
+    if (!value) return '--';
+    const normalized = value.toLowerCase();
+    return normalized === 'admin' ? 'Admin' : 'Employee';
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -65,6 +75,19 @@ export default function Admin() {
       setRequestLoading(false);
     }
   }, [requestFilter]);
+
+  const fetchRoleRequests = useCallback(async (statusOverride) => {
+    const status = statusOverride ?? roleRequestFilter;
+    setRoleRequestLoading(true);
+    try {
+      const res = await adminAPI.getRoleChangeRequests(status === 'all' ? undefined : status);
+      setRoleRequests(res.data || []);
+    } catch (error) {
+      console.error('Error fetching role change requests:', error);
+    } finally {
+      setRoleRequestLoading(false);
+    }
+  }, [roleRequestFilter]);
 
   const fetchShoutoutReports = useCallback(async (statusOverride) => {
     const status = statusOverride ?? shoutoutReportFilter;
@@ -108,6 +131,14 @@ export default function Admin() {
     }
     fetchDepartmentRequests();
   }, [authLoading, fetchDepartmentRequests, user]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!user || user.role !== 'admin') {
+      return;
+    }
+    fetchRoleRequests();
+  }, [authLoading, fetchRoleRequests, user]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -200,6 +231,25 @@ export default function Admin() {
     }
   };
 
+  const handleRoleDecision = async (requestId, action) => {
+    setProcessingRoleRequestId(requestId);
+    const pastTense = action === 'approved' ? 'approved' : 'rejected';
+    const verb = action === 'approved' ? 'approve' : 'reject';
+    try {
+      await adminAPI.decideRoleChangeRequest(requestId, action, { skipErrorToast: true });
+      await fetchRoleRequests();
+      if (action === 'approved') {
+        fetchData();
+      }
+      addToast('success', `Role request ${pastTense} successfully.`);
+    } catch (error) {
+      console.error(`Failed to ${action} role request`, error);
+      addToast('error', `Failed to ${verb} role request. Please try again.`);
+    } finally {
+      setProcessingRoleRequestId(null);
+    }
+  };
+
   const openShoutout = async (id) => {
     setShoutoutPreview({ open: true, data: null, loading: true, error: '' });
     try {
@@ -256,6 +306,7 @@ export default function Admin() {
       return;
     }
     const mapping = {
+      'role-requests': roleSectionRef,
       'department-requests': departmentSectionRef,
       'shoutout-reports': shoutoutReportsRef,
       'comment-reports': commentReportsRef,
@@ -489,6 +540,111 @@ export default function Admin() {
         <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Department Stats</h2>
           <DepartmentStatsChart data={analytics?.department_stats} />
+        </div>
+
+        <div
+          ref={roleSectionRef}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'role-requests' ? 'ring-2 ring-blue-500' : ''}`}
+        >
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Role Change Requests</h2>
+            <div className="flex items-center gap-2">
+              <label htmlFor="role-request-filter" className="text-sm text-gray-600 dark:text-gray-400">Status</label>
+              <select
+                id="role-request-filter"
+                value={roleRequestFilter}
+                onChange={(e) => setRoleRequestFilter(e.target.value)}
+                className="px-3 py-2 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+              >
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+                <option value="all">All</option>
+              </select>
+            </div>
+          </div>
+
+          {roleRequestLoading ? (
+            <p className="text-gray-500 dark:text-gray-400">Loading role change requests...</p>
+          ) : roleRequests.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400">No role change requests for this filter.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-800">
+                <thead className="bg-gray-50 dark:bg-gray-800">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">ID</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Current Role</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Requested Role</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Submitted</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-800">
+                  {roleRequests.map((req) => {
+                    const isProcessing = processingRoleRequestId === req.id;
+                    return (
+                      <tr key={req.id}>
+                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">#{req.id}</td>
+                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
+                          <div className="font-medium text-gray-900 dark:text-gray-100">{req.user?.name || 'Unknown user'}</div>
+                          {req.user?.email && <div className="text-xs text-gray-500 dark:text-gray-400">{req.user.email}</div>}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">{formatRoleLabel(req.current_role)}</td>
+                        <td className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">{formatRoleLabel(req.requested_role)}</td>
+                        <td className="px-4 py-2 text-sm">
+                          <span className={`px-2 py-1 rounded text-xs ${req.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : req.status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            {req.status}
+                          </span>
+                          {req.admin?.name && req.status !== 'pending' && (
+                            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">by {req.admin.name}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400">
+                          <div>{new Date(req.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
+                          {req.resolved_at && (
+                            <div className="text-xs text-gray-500 dark:text-gray-500">Resolved: {new Date(req.resolved_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-right space-x-2">
+                          {req.status === 'pending' ? (
+                            <>
+                              <button
+                                onClick={() => showConfirm(
+                                  'Do you really want to approve this role request?',
+                                  () => handleRoleDecision(req.id, 'approved'),
+                                  { title: 'Confirm Role Request Action' }
+                                )}
+                                disabled={isProcessing}
+                                className={`px-3 py-1 rounded text-white text-sm ${isProcessing ? 'bg-green-500/60 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'}`}
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => showConfirm(
+                                  'Do you really want to reject this role request?',
+                                  () => handleRoleDecision(req.id, 'rejected'),
+                                  { title: 'Confirm Role Request Action' }
+                                )}
+                                disabled={isProcessing}
+                                className={`px-3 py-1 rounded text-white text-sm ${isProcessing ? 'bg-gray-500/60 cursor-not-allowed' : 'bg-gray-600 hover:bg-gray-700'}`}
+                              >
+                                Reject
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-xs text-gray-500 dark:text-gray-400">No action required</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div
