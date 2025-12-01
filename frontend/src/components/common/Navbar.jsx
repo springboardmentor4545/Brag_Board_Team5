@@ -162,15 +162,26 @@ export default function Navbar() {
   const handleNotificationClick = (notification) => {
     setNotificationsOpen(false);
     const redirect = notification?.payload?.redirect_url || notification?.payload?.href;
+    const section = notification?.payload?.section;
     setMobileMenuOpen(false);
     if (redirect) {
       navigate(redirect);
       return;
     }
+    if (section) {
+      navigate(`/admin?section=${section}`);
+      return;
+    }
     if (notification.reference_type === 'department_change') {
       navigate('/profile');
+    } else if (notification.reference_type === 'department_change_request') {
+      navigate('/admin?section=department-requests');
     } else if (notification.reference_type === 'admin' && user?.role === 'admin') {
       navigate('/admin');
+    } else if (notification.reference_type === 'shoutout_report') {
+      navigate('/admin?section=shoutout-reports');
+    } else if (notification.reference_type === 'comment_report') {
+      navigate('/admin?section=comment-reports');
     } else if (notification.reference_type === 'shoutout' || notification.reference_type === 'comment') {
       navigate('/feed');
     }

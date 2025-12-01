@@ -23,7 +23,7 @@ from app.schemas.department_change import (
     DepartmentChangeRequest as DepartmentChangeSchema,
     DepartmentChangeDecision,
 )
-from app.utils.notifications import create_notification
+from app.utils.notifications import create_notification, notify_admins
 from app.utils.responses import success_response
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -455,6 +455,25 @@ async def report_shoutout(
     )
     
     db.add(new_report)
+    db.flush()
+
+    reporter_label = current_user.name or current_user.email or "A user"
+    notify_admins(
+        db,
+        event_type="report.shoutout.created",
+        title="New shout-out report",
+        message=f"{reporter_label} reported shout-out #{shoutout_id}.",
+        actor_id=current_user.id,
+        reference_type="shoutout_report",
+        reference_id=new_report.id,
+        payload={
+            "redirect_url": "/admin?section=shoutout-reports",
+            "section": "shoutout-reports",
+            "report_id": new_report.id,
+            "shoutout_id": shoutout_id,
+        },
+    )
+
     db.commit()
     db.refresh(new_report)
     

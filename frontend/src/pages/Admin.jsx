@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { adminAPI, shoutoutAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/useToast';
@@ -8,6 +8,7 @@ import DepartmentStatsChart from '../../src/components/admin/DepartmentStatsChar
 export default function Admin() {
   const { user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { addToast } = useToast();
   const [analytics, setAnalytics] = useState(null);
   const [shoutoutReports, setShoutoutReports] = useState([]);
@@ -36,6 +37,10 @@ export default function Admin() {
   const [exportStartDate, setExportStartDate] = useState('');
   const [exportEndDate, setExportEndDate] = useState('');
   const [exporting, setExporting] = useState(null);
+  const departmentSectionRef = useRef(null);
+  const shoutoutReportsRef = useRef(null);
+  const commentReportsRef = useRef(null);
+  const [highlightedSection, setHighlightedSection] = useState(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -244,6 +249,38 @@ export default function Admin() {
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [confirmDialog.open, handleConfirmCancel]);
+
+  useEffect(() => {
+    const section = searchParams.get('section');
+    if (!section) {
+      return;
+    }
+    const mapping = {
+      'department-requests': departmentSectionRef,
+      'shoutout-reports': shoutoutReportsRef,
+      'comment-reports': commentReportsRef,
+    };
+    const targetRef = mapping[section];
+    if (targetRef?.current) {
+      const scrollToSection = () => {
+        targetRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      };
+      if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(scrollToSection);
+      } else {
+        scrollToSection();
+      }
+      setHighlightedSection(section);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!highlightedSection) {
+      return undefined;
+    }
+    const timeoutId = window.setTimeout(() => setHighlightedSection(null), 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [highlightedSection]);
 
   const getFilenameFromHeaders = (headers, fallback) => {
     const disposition = headers?.['content-disposition'] || headers?.['Content-Disposition'];
@@ -454,7 +491,10 @@ export default function Admin() {
           <DepartmentStatsChart data={analytics?.department_stats} />
         </div>
 
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">
+        <div
+          ref={departmentSectionRef}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'department-requests' ? 'ring-2 ring-blue-500' : ''}`}
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Department Change Requests</h2>
             <div className="flex items-center gap-2">
@@ -555,7 +595,10 @@ export default function Admin() {
             </div>
           )}
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">
+        <div
+          ref={shoutoutReportsRef}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'shoutout-reports' ? 'ring-2 ring-blue-500' : ''}`}
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Reported Shout-Outs</h2>
             <div className="flex items-center gap-2">
@@ -650,7 +693,10 @@ export default function Admin() {
             </div>
           )}
         </div>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8">
+        <div
+          ref={commentReportsRef}
+          className={`bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 p-6 rounded-lg shadow mt-8 ${highlightedSection === 'comment-reports' ? 'ring-2 ring-blue-500' : ''}`}
+        >
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Reported Comments</h2>
             <div className="flex items-center gap-2">

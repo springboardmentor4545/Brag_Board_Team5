@@ -9,7 +9,7 @@ from app.schemas.comment import Comment as CommentSchema, CommentCreate, Comment
 from app.schemas.comment_report import CommentReport as CommentReportSchema, CommentReportCreate
 from app.middleware.auth import get_current_active_user
 from app.models.comment_report import CommentReport as CommentReportModel
-from app.utils.notifications import create_notification
+from app.utils.notifications import create_notification, notify_admins
 from app.utils.responses import success_response
 import re
 from sqlalchemy.orm import joinedload
@@ -264,6 +264,26 @@ async def report_comment(
     )
 
     db.add(new_report)
+    db.flush()
+
+    reporter_label = current_user.name or current_user.email or "A user"
+    notify_admins(
+        db,
+        event_type="report.comment.created",
+        title="New comment report",
+        message=f"{reporter_label} reported comment #{comment_id} on shout-out #{comment.shoutout_id}.",
+        actor_id=current_user.id,
+        reference_type="comment_report",
+        reference_id=new_report.id,
+        payload={
+            "redirect_url": "/admin?section=comment-reports",
+            "section": "comment-reports",
+            "report_id": new_report.id,
+            "comment_id": comment_id,
+            "shoutout_id": comment.shoutout_id,
+        },
+    )
+
     db.commit()
     db.refresh(new_report)
 

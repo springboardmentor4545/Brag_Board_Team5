@@ -9,6 +9,7 @@ from app.middleware.auth import get_current_active_user
 import os
 import secrets
 from app.schemas.department_change import DepartmentChangeRequest as DepartmentChangeSchema
+from app.utils.notifications import notify_admins
 
 AVATAR_DIR = os.path.join(os.getcwd(), "uploads", "avatars")
 os.makedirs(AVATAR_DIR, exist_ok=True)
@@ -51,12 +52,16 @@ async def update_current_user(
         changed = True
 
     new_pending_department = None
+    should_notify_admins = False
     if user_update.department is not None:
         if not user_update.department or not user_update.department.strip():
             raise HTTPException(status_code=400, detail="Department cannot be empty")
         if user_update.department != current_user.department:
             if pending_request:
-                pending_request.requested_department = user_update.department
+                if pending_request.requested_department != user_update.department:
+                    pending_request.requested_department = user_update.department
+                    changed = True
+                    should_notify_admins = True
             else:
                 pending_request = DepartmentChangeRequest(
                     user_id=current_user.id,
@@ -65,10 +70,28 @@ async def update_current_user(
                     status="pending"
                 )
                 db.add(pending_request)
-            changed = True
-            new_pending_department = user_update.department
+                changed = True
+                should_notify_admins = True
+            new_pending_department = pending_request.requested_department if pending_request else user_update.department
 
     if changed:
+        if should_notify_admins and pending_request:
+            db.flush()
+            notify_admins(
+                db,
+                event_type="department_change.requested",
+                title="New department change request",
+                message=f"{current_user.name or 'An employee'} requested a move to {pending_request.requested_department}.",
+                actor_id=current_user.id,
+                reference_type="department_change_request",
+                reference_id=pending_request.id,
+                payload={
+                    "redirect_url": "/admin?section=department-requests",
+                    "section": "department-requests",
+                    "request_id": pending_request.id,
+                    "user_id": current_user.id,
+                },
+            )
         db.commit()
 
     db.refresh(current_user)
