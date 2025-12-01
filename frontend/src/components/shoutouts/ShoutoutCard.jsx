@@ -56,6 +56,7 @@ export default function ShoutoutCard({
   const [commentDeleteState, setCommentDeleteState] = useState({ open: false, commentId: null, submitting: false, error: '' });
   const [commentEditMention, setCommentEditMention] = useState({ query: '', suggestions: [], activeIndex: 0, show: false });
   const [highlightedCommentId, setHighlightedCommentId] = useState(null);
+  const [commentMenuPositions, setCommentMenuPositions] = useState({});
   const [isMounted, setIsMounted] = useState(false);
   const portalElement = typeof document !== 'undefined' ? document.body : null;
   // no local loading state required for now
@@ -64,6 +65,7 @@ export default function ShoutoutCard({
   const actionsMenuRef = useRef(null);
   const commentEditTextareaRef = useRef(null);
   const commentContainerRef = useRef(null);
+  const commentMenuRefs = useRef(new Map());
   const isOwner = Boolean(user?.id) && (user?.id === shoutout.sender_id || user?.id === shoutout.sender?.id);
 
   useEffect(() => () => {
@@ -122,7 +124,10 @@ export default function ShoutoutCard({
   useEffect(() => {
     if (activeCommentMenu == null) return undefined;
     const handleOutside = (event) => {
-      if (!event.target.closest('[data-comment-menu]')) {
+      if (
+        !event.target.closest('[data-comment-menu]') &&
+        !event.target.closest('[data-comment-menu-dropdown]')
+      ) {
         setActiveCommentMenu(null);
       }
     };
@@ -185,6 +190,48 @@ export default function ShoutoutCard({
       cancelled = true;
     };
   }, [commentEditMention.query, commentEditState.commentId]);
+
+  const updateCommentMenuPosition = useCallback((commentId) => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    const el = commentMenuRefs.current.get(commentId);
+    if (!el) {
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const viewportPadding = 12;
+    const width = 160;
+    const preferredLeft = rect.right - width;
+    const left = Math.min(
+      Math.max(preferredLeft, viewportPadding),
+      Math.max(viewportPadding, window.innerWidth - viewportPadding - width)
+    );
+    const preferredTop = rect.top + rect.height + 8;
+    const maxTop = window.innerHeight - viewportPadding - 120;
+    const top = Math.min(preferredTop, maxTop);
+    setCommentMenuPositions((prev) => {
+      const existing = prev[commentId];
+      if (existing && existing.top === top && existing.left === left) {
+        return prev;
+      }
+      return { ...prev, [commentId]: { top, left } };
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activeCommentMenu) {
+      return undefined;
+    }
+    updateCommentMenuPosition(activeCommentMenu);
+    const handleReposition = () => updateCommentMenuPosition(activeCommentMenu);
+    window.addEventListener('resize', handleReposition);
+    window.addEventListener('scroll', handleReposition, true);
+    return () => {
+      window.removeEventListener('resize', handleReposition);
+      window.removeEventListener('scroll', handleReposition, true);
+    };
+  }, [activeCommentMenu, updateCommentMenuPosition]);
 
   const openReactionMenu = () => {
     if (reactionMenuTimeoutRef.current) {
@@ -763,13 +810,15 @@ export default function ShoutoutCard({
                         <div className="border-t border-gray-200 dark:border-gray-700" />
                       </>
                     )}
-                    <button
-                      type="button"
-                      onClick={openReportShoutoutModal}
-                      className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
-                    >
-                      Report shout-out
-                    </button>
+                    {!isOwner && (
+                      <button
+                        type="button"
+                        onClick={openReportShoutoutModal}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      >
+                        Report shout-out
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -929,10 +978,28 @@ export default function ShoutoutCard({
                         </p>
                       </div>
                       {user && (
-                        <div data-comment-menu={comment.id} className="relative shoutout-card-comment-menu">
+                        <div
+                          data-comment-menu={comment.id}
+                          className="relative shoutout-card-comment-menu"
+                          ref={(node) => {
+                            if (node) {
+                              commentMenuRefs.current.set(comment.id, node);
+                            } else {
+                              commentMenuRefs.current.delete(comment.id);
+                            }
+                          }}
+                        >
                           <button
                             type="button"
-                            onClick={() => setActiveCommentMenu((prev) => (prev === comment.id ? null : comment.id))}
+                            onClick={() => {
+                              setActiveCommentMenu((prev) => {
+                                const next = prev === comment.id ? null : comment.id;
+                                if (next) {
+                                  updateCommentMenuPosition(comment.id);
+                                }
+                                return next;
+                              });
+                            }}
                             className="p-1.5 rounded-full text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                             aria-haspopup="true"
                             aria-expanded={isMenuOpen}
@@ -940,37 +1007,50 @@ export default function ShoutoutCard({
                           >
                             ⋮
                           </button>
-                          {isMenuOpen && (
-                            <div className="absolute right-0 mt-2 w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg z-20 shoutout-card-comment-menu-dropdown">
-                              {isCommentOwner && (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => startEditComment(comment)}
-                                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                          {isMenuOpen &&
+                            createPortal(
+                              (
+                                <div className="fixed inset-0 pointer-events-none z-40">
+                                  <div
+                                    className="absolute w-40 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shadow-lg pointer-events-auto shoutout-card-comment-menu-dropdown"
+                                    data-comment-menu-dropdown
+                                    style={{
+                                      top: `${commentMenuPositions[comment.id]?.top ?? 0}px`,
+                                      left: `${commentMenuPositions[comment.id]?.left ?? 0}px`,
+                                    }}
                                   >
-                                    Edit comment
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => openDeleteCommentModal(comment)}
-                                    className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
-                                  >
-                                    Delete comment
-                                  </button>
-                                </>
-                              )}
-                              {!isCommentOwner && (
-                                <button
-                                  type="button"
-                                  onClick={() => openReportCommentModal(comment)}
-                                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
-                                >
-                                  Report comment
-                                </button>
-                              )}
-                            </div>
-                          )}
+                                    {isCommentOwner && (
+                                      <>
+                                        <button
+                                          type="button"
+                                          onClick={() => startEditComment(comment)}
+                                          className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                        >
+                                          Edit comment
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => openDeleteCommentModal(comment)}
+                                          className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                        >
+                                          Delete comment
+                                        </button>
+                                      </>
+                                    )}
+                                    {!isCommentOwner && (
+                                      <button
+                                        type="button"
+                                        onClick={() => openReportCommentModal(comment)}
+                                        className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-100 hover:bg-gray-100 dark:hover:bg-gray-800"
+                                      >
+                                        Report comment
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ),
+                              portalElement
+                            )}
                         </div>
                       )}
                     </div>
