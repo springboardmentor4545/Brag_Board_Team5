@@ -18,6 +18,8 @@ export default function CreateShoutout({ onClose, onCreate }) {
   const searchDebounceRef = useRef(null);
   const fileInputRef = useRef(null);
   const recipientContainerRef = useRef(null);
+  const modalContainerRef = useRef(null);
+  const panelRef = useRef(null);
   const [suggestionPosition, setSuggestionPosition] = useState({ top: 0, left: 0, width: 0 });
   const { user } = useAuth();
   const trimmedRecipientQuery = recipientQuery.trim();
@@ -103,11 +105,35 @@ export default function CreateShoutout({ onClose, onCreate }) {
     const handleReposition = () => updateSuggestionPosition();
     window.addEventListener('resize', handleReposition);
     window.addEventListener('scroll', handleReposition, true);
+    const modalEl = modalContainerRef.current;
+    modalEl?.addEventListener('scroll', handleReposition, { passive: true });
     return () => {
       window.removeEventListener('resize', handleReposition);
       window.removeEventListener('scroll', handleReposition, true);
+      modalEl?.removeEventListener('scroll', handleReposition);
     };
   }, [shouldShowRecipientSuggestions, recipientSuggestions.length, recipientLoading, updateSuggestionPosition]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      if (panel.contains(event.target)) {
+        return;
+      }
+      if (event.target.closest('.comment-input-suggestions') || event.target.closest('.shoutout-suggestion-list')) {
+        return;
+      }
+      onClose();
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [onClose]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -233,8 +259,14 @@ export default function CreateShoutout({ onClose, onCreate }) {
 
   return (
     <>
-      <div className={`fixed inset-0 flex items-center justify-center p-4 z-50 shoutout-modal ${isMounted ? 'is-mounted' : ''}`}>
-        <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg w-full max-w-xl md:max-w-2xl p-4 md:p-6 max-h-[85vh] overflow-y-auto shoutout-panel">
+      <div
+        ref={modalContainerRef}
+        className={`fixed inset-0 flex justify-center overflow-y-auto p-4 md:p-8 z-50 shoutout-modal ${isMounted ? 'is-mounted' : ''}`}
+      >
+        <div
+          ref={panelRef}
+          className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-lg w-full max-w-xl md:max-w-2xl p-4 md:p-6 max-h-[85vh] overflow-y-auto shoutout-panel mt-6 md:mt-8"
+        >
           <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-gray-100 shoutout-panel-title">Create Shout-Out</h2>
           <form onSubmit={handleSubmit} className="shoutout-form">
             {formError && (
@@ -295,7 +327,7 @@ export default function CreateShoutout({ onClose, onCreate }) {
                       value={recipientQuery}
                       onChange={handleRecipientInputChange}
                       onKeyDown={handleRecipientKeyDown}
-                      placeholder="Search teammates by name or email"
+                      placeholder="Search teammates by name..."
                       className="w-full pl-9 pr-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 shoutout-recipient-input"
                     />
                   </div>

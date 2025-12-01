@@ -1406,9 +1406,10 @@ html.dark .shoutout-card-comment-menu-dropdown {
 /* Create shout-out modal animations */
 .shoutout-modal {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-height: 80vh;
+  overflow-y: auto;
   opacity: 0;
   transition: opacity 260ms ease;
   backdrop-filter: blur(2px);
